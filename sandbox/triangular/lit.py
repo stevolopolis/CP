@@ -14,7 +14,7 @@ class LitDelaunayNGPConfig(pydantic.BaseModel):
 
     hash_features: int = 2
     hash_num_points: int = 1000
-    hash_num_heads: int = 3
+    hash_num_heads: int = 1
 
     mlp_features: int = 32
     mlp_hidden_layers: int = 2
@@ -37,7 +37,7 @@ class LitDelaunayNGP(pl.LightningModule):
         self.config: LitDelaunayNGPConfig = LitDelaunayNGPConfig.parse_obj(config)
         cfg = self.config
 
-        self.model = DelaunayNGP(
+        self.ngp = DelaunayNGP(
             hash_features=cfg.hash_features,
             hash_num_points=cfg.hash_num_points,
             hash_num_heads=cfg.hash_num_heads,
@@ -51,7 +51,7 @@ class LitDelaunayNGP(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         coords, colors = batch
-        preds = self.model(coords)
+        preds = self.ngp(coords)
 
         loss = F.mse_loss(preds, colors)
         psnr = -10 * torch.log10(loss)

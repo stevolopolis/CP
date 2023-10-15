@@ -27,7 +27,7 @@ class TrainDelaunayNGPConfig(LitDelaunayNGPConfig):
     # Training Fields
     # ===============
 
-    max_epochs: int = 2000
+    max_epochs: int = 1000
 
     # ==============
     # Logging Fields
