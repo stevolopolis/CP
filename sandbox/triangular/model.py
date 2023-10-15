@@ -24,10 +24,13 @@ def barycentric_interpolation(vertices, values, queries):
 
 class DelaunayHashEmbedder(nn.Module):
 
-    def __init__(self, features=2, num_points=100):
+    def __init__(self, features=2, num_points=100, learned_anchors=True):
         super().__init__()
 
-        self.anchors = nn.Parameter(torch.randn(num_points, 2))
+        if learned_anchors:
+            self.anchors = nn.Parameter(torch.randn(num_points, 2))
+        else:
+            self.register_buffer("anchors", torch.randn(num_points, 2))
         self.embs = nn.Parameter(torch.randn(num_points + 4, features))
 
     def forward(self, input):
@@ -57,6 +60,7 @@ class DelaunayNGP(nn.Module):
         mlp_features=32,
         mlp_hidden_layers=2,
         out_features=3,
+        learned_anchors=True,
     ):
         super().__init__()
 
@@ -65,6 +69,7 @@ class DelaunayNGP(nn.Module):
             DelaunayHashEmbedder(
                 features=hash_features,
                 num_points=hash_num_points,
+                learned_anchors=learned_anchors,
             )
             for _ in range(hash_num_heads)
         ])

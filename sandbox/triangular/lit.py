@@ -15,8 +15,11 @@ class LitDelaunayNGPConfig(pydantic.BaseModel):
     hash_features: int = 2
     hash_num_points: int = 1000
     hash_num_heads: int = 3
+
     mlp_features: int = 32
     mlp_hidden_layers: int = 2
+
+    learned_anchors: bool = True
 
     # ===============
     # Training Fields
@@ -40,6 +43,7 @@ class LitDelaunayNGP(pl.LightningModule):
             hash_num_heads=cfg.hash_num_heads,
             mlp_features=cfg.mlp_features,
             mlp_hidden_layers=cfg.mlp_hidden_layers,
+            learned_anchors=cfg.learned_anchors,
         )
 
     def configure_optimizers(self):
