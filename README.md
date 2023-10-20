@@ -1,6 +1,25 @@
 # Coordinate Permutation Is All You Need
 
 ## Structure of the repo
+- `main_image.py`: main() to train on 2D images
+- `main_sdf.py`: main() to train on 3D SDFs (under construction)
+- `hash_visualizer.py`: 
+- `data.py`: dataLoaders
+- `<model_type>_experiments`: 
+    - `models.py`: nn.modules
+    - `utils.py`: model specific trainer class 
+- `configs`:
+    - `<model_type>.ini`: model specific configurations
+
+## Get started -- Data preparation
+All data are loaded using the function `get_data()` defined in `main_image.py`. All data should be stored in a common directory. Change the global variable `BASE_PATH` in `main_image.py` to the common directory once setup.
+
+
+## Get started -- train a new model
+```python main_image.py configs/<config.ini> <model_type>``` 
+
+## Get started -- visualize a trained model
+```python hash_visualizer.py configs/<config.ini> <model_type> <vis_folder>```
 
 ## Questions seeking answers
 - Coordinate permutation (CP) perspective in one resolution (observed; not proved yet)
