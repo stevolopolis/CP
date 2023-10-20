@@ -3,8 +3,6 @@ import math
 import torch
 from torch import nn
 
-import tinycudann as tcnn
-
 
 class ReluLayer(nn.Module):
     def __init__(self, in_features, out_features, bias=True):
@@ -170,7 +168,7 @@ class NGP(nn.Module):
 
         return output
 
-
+"""
 class TinyHashEmbedder(nn.Module):
     def __init__(self, img_size, n_levels=16, n_features_per_level=2,\
             log2_hashmap_size=19, base_resolution=16, finest_resolution=512):
@@ -233,3 +231,4 @@ class TinyNGP(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+"""
