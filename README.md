@@ -11,9 +11,17 @@
 - `configs`:
     - `<model_type>.ini`: model specific configurations
 
+We use W&B to log training stats and visualizations. W&B configs are specified in the config .ini files:
+```
+[WANDB]
+use_wandb: 1
+wandb_project: playground
+wandb_entity: utmist-parsimony
+```
+Do not change `wandb_entity`, this is our base W&B directory. If you are running a big cluster of experiments that is working towards your own dedicated research question, create a new W&B project by specifying a different string for `wandb_project`. For any small PoC experiments, feel free to just dump it into `wandb_project: playground`.
+
 ## Get started -- Data preparation
 All data are loaded using the function `get_data()` defined in `main_image.py`. All data should be stored in a common directory. Change the global variable `BASE_PATH` in `main_image.py` to the common directory once setup.
-
 
 ## Get started -- train a new model
 ```python main_image.py configs/<config.ini> <model_type>``` 
