@@ -1,0 +1,8 @@
+torch
+torchvision
+tqdm
+scikit-image
+pillow
+numpy
+wandb
+urllib

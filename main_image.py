@@ -17,7 +17,7 @@ from data import ImageFile, PointCloud, BigImageFile, CIFAR10, CameraDataset
 
 
 MEGAPIXELS = ["pluto", "tokyo", "mars"]
-
+BASE_PATH = "/home/steven/datasets"
 
 random.seed(21)
 
@@ -26,20 +26,18 @@ def get_data(dataset, batch_size, coord_mode='0', idx=None):
         # Total instances = 70000
         data_idx = random.randint(1, 70001) if idx is None else idx
         data_idx = str(data_idx).zfill(5)
-        dataset = ImageFile("datasets/images1024x1024/%s.png" % data_idx, coord_mode=coord_mode)
+        dataset = ImageFile("%s/images1024x1024/%s.png" % (BASE_PATH, data_idx), coord_mode=coord_mode)
     elif dataset == "cifar10":
         data_idx = random.randint(0, 1000) if idx is None else idx
-        dataset = CIFAR10("/home/paperspace/Documents/inr_for_compression/datasets/CIFAR10", data_idx) # For Paperspace
-        #dataset = CIFAR10("/home/steven/datasets/CIFAR10", data_idx)    # For HKU
+        dataset = CIFAR10("%s/CIFAR10" % BASE_PATH, data_idx) 
     elif dataset == "celebA":
         data_idx = random.randint(1, 202600) if idx is None else idx
         data_idx = str(data_idx).zfill(6)
-        dataset = ImageFile("/home/paperspace/Documents/inr_for_compression/datasets/celeba/celeba/img_align_celeba/%s.jpg" % data_idx, coord_mode=coord_mode)  # For Paperspace
+        dataset = ImageFile("%s/celeba/celeba/img_align_celeba/%s.jpg" % (BASE_PATH, data_idx), coord_mode=coord_mode)  # For Paperspace
     elif dataset == "kodak":
         data_idx = random.randint(1, 25) if idx is None else idx
         data_idx = str(data_idx).zfill(2)
-        dataset = ImageFile("/home/paperspace/Documents/inr_for_compression/datasets/kodak/kodim%s.png" % data_idx, coord_mode=coord_mode)  # For Paperspace
-        #dataset = ImageFile("/home/steven/datasets/kodak/kodim%s.png" % data_idx)  # For HKU
+        dataset = ImageFile("%s/kodak/kodim%s.png" % (BASE_PATH, data_idx), coord_mode=coord_mode)
     elif dataset == "ImageNet":
         # Total instances = 100000
         data_idx = random.randint(1, 100001) if idx is None else idx
@@ -48,11 +46,10 @@ def get_data(dataset, batch_size, coord_mode='0', idx=None):
         #dataset = ImageFile("/home/mnt/data/imagenet/val/ILSVRC2012_val_%s.JPEG" % (data_idx), normalize=True)  # For HKU
     elif dataset == "pluto":
         # 16,000,000 is the max number of pixels two A5000 can handle in one batch for L16_nfeat18_featdim2
-        dataset = BigImageFile("/home/paperspace/Documents/inr_for_compression/datasets/megapixels/pluto.png", max_coords=16000000, coord_mode=coord_mode)
+        dataset = BigImageFile("%s/megapixels/pluto.png" % (BASE_PATH), max_coords=16000000, coord_mode=coord_mode)
         data_idx = "0"
     elif dataset == "sdf.armadillo":
-        dataset = PointCloud("/home/paperspace/Documents/inr_for_compression/datasets/sdf/Armadillo.xyz", batch_size)  # For Paperspace
-        #dataset = PointCloud("/home/steven/datasets/sdf/Armadillo.xyz", args.batch_size)   # For hku server
+        dataset = PointCloud("%s/sdf/Armadillo.xyz" % (BASE_PATH), batch_size)
         data_idx = "0"
     elif dataset == "cameraman":
         dataset = CameraDataset(side_length=512, normalize=True)
@@ -117,7 +114,7 @@ def main():
                     project=args.wandb_project,
                     entity=args.wandb_entity,
                     config=args,
-                    group="hash_visualization",
+                    group="train_image",
                     name=experiment_name
                 )
 

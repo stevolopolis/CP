@@ -10,6 +10,7 @@ from main_image import get_data
 
 
 def visualize_model_prediction(trainer, x, y, data_shape, log):
+    """Generic model prediction."""
     # get the original prediction of the model
     preds = trainer.model(x.to(trainer.args.device))
     loss = ((preds - y.to(trainer.args.device)) ** 2).mean()
@@ -24,9 +25,14 @@ def visualize_model_prediction(trainer, x, y, data_shape, log):
     log["recon"] = wandb.Image(im)
 
 
-def visualize_hash_function(trainer, x, data_shape, log):
+def visualize_diner_hash_function(trainer, data_shape, log):
+    """
+    Visualize the hash map of DINER.
+    
+    Note that DINER hash values are 2D, while we visualize in 3D. 
+    We do so by padding the R channel with zeros.
+    """
     # Visualizing the hash operation
-    #hashed_input = trainer.model.hash_table(x.to(trainer.args.device))     # ngp
     hashed_input = trainer.model.table.data     # diner
     hashed_input = hashed_input - torch.min(hashed_input, dim=0)[0]
     hashed_input = hashed_input / torch.max(hashed_input, dim=0)[0]
@@ -38,7 +44,16 @@ def visualize_hash_function(trainer, x, data_shape, log):
     log["hashing"] = wandb.Image(hashed_im)
 
 
-def visualize_hash_space(trainer, x, y, data_shape, log):
+def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
+    """
+    Visualize the effects of each level of NGP hashing.
+
+    NGP hashes coordinates in a multiresolution many-to-one manner.
+    To understand the contributions of each level of hashing 
+    indivdually, we zero out all the hash values except for one level
+    and feed this augmented set of hashed values to the MLP. 
+    We visualize the reconstructed image with this augmented hash vals.
+    """
     for level in range(trainer.model.hash_table.n_levels):
         # get the prediction without the highest resolution hashing
         hashed_input = trainer.model.hash_table(x.to(trainer.args.device))
@@ -98,12 +113,10 @@ def main():
     print("Model parameters: ", trainer.get_model_size())
 
     # init wanbd report for visualizing the experiment results
-    wandb.init(project="Experiments",
-               entity="stevenluots",
-               #group="kodak20",
-               #name="v1"
+    wandb.init(project=args.wandb_project,
+               entity=args.wandb_entity,
                group="hash_visualization",
-               name="diner_relu_kodak20_run0_layer2_hidden64_w_030.0"
+               name="%s_visuals" % common_arg.model
                )
 
     # understand what the highest resolution hashing is contributing to the reconstruction
@@ -115,8 +128,8 @@ def main():
     # Visualization set
     log = {}
     visualize_model_prediction(trainer, x, y, data_shape, log)
-    visualize_hash_function(trainer, x, data_shape, log)
-    #visualize_hash_space(trainer, x, y, data_shape, log)
+    #visualize_hash_function(trainer, data_shape, log, model=common_arg.model)
+    visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log)
     wandb.log(log)
 
     # visualizing the r-slice of the MLP space

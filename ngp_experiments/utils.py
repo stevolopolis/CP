@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from PIL import Image
 from skimage.metrics import structural_similarity as ssim_func
+from skimage.metrics import peak_signal_noise_ratio as psnr_func
 
 import wandb
 
@@ -88,7 +89,10 @@ class Trainer(AbstractTrainer):
             self.opt.step()
             self.scheduler.step()
 
-            ssim = ssim_func(preds.cpu().detach().numpy(), y.cpu().detach().numpy(), data_range=2, channel_axis=-1)
+            preds = preds.cpu().detach().numpy()
+            y = y.cpu().detach().numpy()
+            psnr = psnr_func(preds, y, data_range=1)
+            ssim = ssim_func(preds, y, data_range=1, channel_axis=-1)
             losses.append(loss.item())
             psnrs.append(psnr)
             ssims.append(ssim)
@@ -214,7 +218,10 @@ class Trainer(AbstractTrainer):
         # Get hashed coordinates (self.args.n_levels different levels)
         hash_vals = self.model.hash_table(x.to(self.args.device)).detach().clone().cpu().numpy()
         for i in range(self.args.n_levels):
-            c = y / 2 + 0.5
+            if torch.min(y) < 0:
+                c = y / 2 + 0.5
+            else: 
+                c = y
             hash_vertices = self.locate_hash_vertices(i)
             c = c.detach().cpu().numpy()
             fig = plt.figure(figsize=(7, 7))
@@ -279,8 +286,8 @@ def get_img_pred(model, loader, img_shape, device="cuda", gt=False):
     
     # reshape, convert to image, return
     pred = pred.reshape(img_shape)
-    # Normalize from [-1, 1] to [0, 1]
-    pred = pred / 2 + 0.5
+    if np.min(pred) < 0:
+        pred = pred / 2 + 0.5
 
     return pred
 
