@@ -23,4 +23,8 @@ from .OverfitSDF import OverfitSDF
 from .BasicDecoder import BasicDecoder
 from .OctreeSDF import OctreeSDF
 from .SOL_NGLOD import SOL_NGLOD
+from .siren import Siren
+from .SIREN import SIREN
+from .TACO import TACO
+from .NGP import NGP
 
