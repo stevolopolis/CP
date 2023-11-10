@@ -64,10 +64,14 @@ class InstantNGPModelConfig(ModelConfig):
     """Resolution of the grid used for the field."""
     grid_levels: int = 4
     """Levels of the grid used for the field."""
+    min_res: int = 16,
+    """Minimum resolution of the hashmap for the base mlp."""
     max_res: int = 2048
     """Maximum resolution of the hashmap for the base mlp."""
     log2_hashmap_size: int = 19
     """Size of the hashmap for the base mlp"""
+    num_levels: int = 16
+    """Number of resolution levels of the hashmap for the base mlp."""
     alpha_thre: float = 0.01
     """Threshold for opacity skipping."""
     cone_angle: float = 0.004
@@ -115,7 +119,9 @@ class NGPModel(Model):
             appearance_embedding_dim=0 if self.config.use_appearance_embedding else 32,
             num_images=self.num_train_data,
             log2_hashmap_size=self.config.log2_hashmap_size,
+            base_res=self.config.min_res,
             max_res=self.config.max_res,
+            num_levels=self.config.num_levels,
             spatial_distortion=scene_contraction,
         )
 
