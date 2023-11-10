@@ -28,6 +28,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import argparse
 import glob
 import logging as log
+import torch
+import os
 
 from lib.trainer import Trainer
 from lib.options import parse_options
@@ -44,5 +46,8 @@ if __name__ == "__main__":
     args, args_str = parse_options()
     log.info(f'Parameters: \n{args_str}')
     log.info(f'Training on {args.dataset_path}')
+    if args.device is not None:
+        device_id = args.device[-1]
+        os.environ['CUDA_VISIBLE_DEVICES'] = device_id
     model = Trainer(args, args_str)
     model.train()
