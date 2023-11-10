@@ -91,6 +91,31 @@ def parse_options(return_parser=False):
     net_group.add_argument('--feat-sum', action='store_true',
                           help='Sum the features.')
 
+    # Architecture for NGP
+    net_group.add_argument('--n-levels', type=int)
+    #net_group.add_argument('--feature-dim')
+    net_group.add_argument('--log2-n-features', type=int)
+    net_group.add_argument('--base-resolution', type=int)
+    net_group.add_argument('--finest-resolution', type=int)
+    net_group.add_argument('--hidden-features', type=int)
+    net_group.add_argument('--hidden-layers', type=int)
+    net_group.add_argument('--out-features', type=int)
+
+    # Architecture for SIREN
+    #net_group.add_argument('--num-layers', type=int)
+    net_group.add_argument('--dim-hidden', type=int)
+    net_group.add_argument('--w0', type=float)
+    net_group.add_argument('--w0-initial', type=float)
+    net_group.add_argument('--use-bias', type=bool, default=True)
+
+    # Architecture for TACO
+    net_group.add_argument('--dim-in', type=int)
+    net_group.add_argument('--dim-out', type=int)
+    #net_group.add_argument('--dim-hidden', type=int)
+    #net_group.add_argument('--w0', type=float)
+    net_group.add_argument('--data-resolution', type=int)
+
+
     # Arguments for dataset
     data_group = parser.add_argument_group('dataset')
 
@@ -114,7 +139,7 @@ def parse_options(return_parser=False):
     data_group.add_argument('--samples-per-voxel', type=int, default=256,
                             help='Number of samples per voxel (for SPC)')
     data_group.add_argument('--sample-mode', type=str, nargs='*', 
-                            default=['rand', 'near', 'near', 'trace', 'trace'],
+                            default=['rand', 'rand', 'rand', 'near', 'trace'],
                             help='The sampling scheme to be used.')
     data_group.add_argument('--trim', action='store_true',
                             help='Trim inner triangles (will destroy UVs!).')
@@ -230,6 +255,7 @@ def parse_options(return_parser=False):
                                 help='Use shadowing.')
     renderer_group.add_argument('--shading-mode', type=str, default='matcap',
                                 help='Shading mode.')
+    renderer_group.add_argument('--device', type=str)
 
     # Parse and run
     if return_parser:
