@@ -97,6 +97,7 @@ class NerfactoField(Field):
         spatial_distortion: Optional[SpatialDistortion] = None,
         implementation: Literal["tcnn", "torch"] = "tcnn",
         hash_level_threshold: Optional[int] = None,
+        store_field: bool = False,
     ) -> None:
         super().__init__()
 
@@ -118,6 +119,7 @@ class NerfactoField(Field):
         self.pass_semantic_gradients = pass_semantic_gradients
         self.base_res = base_res
         self.step = 0
+        self.store_field = store_field
 
         self.direction_encoding = SHEncoding(
             levels=4,
@@ -218,6 +220,7 @@ class NerfactoField(Field):
         if not self._sample_locations.requires_grad:
             self._sample_locations.requires_grad = True
         positions_flat = positions.view(-1, 3)
+        hash = self.mlp_base_grid(positions_flat)
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
@@ -300,5 +303,22 @@ class NerfactoField(Field):
         )
         rgb = self.mlp_head(h).view(*outputs_shape, -1).to(directions)
         outputs.update({FieldHeadNames.RGB: rgb})
+
+        if self.store_field:
+            if self.spatial_distortion is not None:
+                positions = ray_samples.frustums.get_positions()
+                positions = self.spatial_distortion(positions)
+                positions = (positions + 2.0) / 4.0
+            else:
+                positions = SceneBox.get_normalized_positions(ray_samples.frustums.get_positions(), self.aabb)
+            # Make sure the tcnn gets inputs between 0 and 1.
+            selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
+            positions = positions * selector[..., None]
+            self._sample_locations = positions
+            if not self._sample_locations.requires_grad:
+                self._sample_locations.requires_grad = True
+            positions_flat = positions.view(-1, 3)
+            hash = self.mlp_base_grid(positions_flat)
+            outputs.update({FieldHeadNames.HASH: hash})
 
         return outputs

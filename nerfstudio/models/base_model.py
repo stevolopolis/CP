@@ -33,6 +33,7 @@ from nerfstudio.configs.config_utils import to_immutable_dict
 from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
 from nerfstudio.model_components.scene_colliders import NearFarCollider
+from nerfstudio.field_components.field_heads import FieldHeadNames
 
 
 # Model related configs
@@ -181,13 +182,36 @@ class Model(nn.Module):
             ray_bundle = ray_bundle.to(self.device)
             outputs = self.forward(ray_bundle=ray_bundle)
             for output_name, output in outputs.items():  # type: ignore
+                if output_name == "field":
+                    for _k, _v in output.items():
+                        if not isinstance(_v, torch.Tensor):
+                            continue
+                        output[_k] = _v.to(input_device)
+
+                        # TODO: fix this hack
+                        if _k == FieldHeadNames.HASH:
+                            output[_k] = output[_k][:, :2]
+
+                    outputs_lists["field"].append(output)
+
                 if not isinstance(output, torch.Tensor):
                     # TODO: handle lists of tensors as well
                     continue
                 # move the chunk outputs from the model device back to the device of the inputs.
                 outputs_lists[output_name].append(output.to(input_device))
         outputs = {}
+
         for output_name, outputs_list in outputs_lists.items():
+            if output_name == "field":
+                outputs["field"] = {}
+                for _k in outputs_list[0]:
+                    # to save memory usage
+                    if _k not in [FieldHeadNames.RGB, FieldHeadNames.HASH]:
+                        continue
+
+                    outputs["field"][_k] = torch.cat([outputs_list_element[_k]
+                                                      for outputs_list_element in outputs_list])
+                continue
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
         return outputs
 

@@ -92,6 +92,8 @@ class InstantNGPModelConfig(ModelConfig):
     """Whether to disable scene contraction or not."""
     hash_level_threshold: Optional[int] = None
     """Zero out hash levels after threshold for base_mlp. If None, use max value."""
+    store_field: bool = False
+    """Store field outputs."""
 
 
 class NGPModel(Model):
@@ -126,6 +128,7 @@ class NGPModel(Model):
             num_levels=self.config.num_levels,
             spatial_distortion=scene_contraction,
             hash_level_threshold=self.config.hash_level_threshold,
+            store_field=self.config.store_field,
         )
 
         self.scene_aabb = Parameter(self.scene_box.aabb.flatten(), requires_grad=False)
@@ -228,6 +231,10 @@ class NGPModel(Model):
             "depth": depth,
             "num_samples_per_ray": packed_info[:, 1],
         }
+
+        if self.config.store_field:
+            outputs.update({"field": field_outputs})
+
         return outputs
 
     def get_metrics_dict(self, outputs, batch):

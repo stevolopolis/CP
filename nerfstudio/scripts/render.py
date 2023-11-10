@@ -69,6 +69,9 @@ from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.utils.rich_utils import CONSOLE, ItersPerSecColumn
 from nerfstudio.utils.scripts import run_command
 from nerfstudio.models.instant_ngp import InstantNGPModelConfig
+from nerfstudio.field_components.field_heads import FieldHeadNames
+
+from matplotlib import pyplot as plt
 
 def _render_trajectory_video(
     pipeline: Pipeline,
@@ -625,6 +628,8 @@ class DatasetRender(BaseRender):
     """Name of the renderer outputs to use. rgb, depth, raw-depth, gt-rgb etc. By default all outputs are rendered."""
     hash_level_threshold: Optional[int] = None
     """Zero out hash levels after threshold for base_mlp. If None, use max value."""
+    save_hash_random: bool = False
+    """Randomly sample visited coordinates in rays and save hash, density, and color."""
 
     def main(self):
         config: TrainerConfig
@@ -645,6 +650,10 @@ class DatasetRender(BaseRender):
                 # TODO: this should be generalized to all models using NerfactoField
                 assert isinstance(config.pipeline.model, InstantNGPModelConfig)
                 config.pipeline.model.hash_level_threshold = self.hash_level_threshold
+            if self.save_hash_random:
+                # TODO: this should be generalized to all models using NerfactoField
+                assert isinstance(config.pipeline.model, InstantNGPModelConfig)
+                config.pipeline.model.store_field = True
             return config
 
         config, pipeline, _, _ = eval_setup(
@@ -695,6 +704,52 @@ class DatasetRender(BaseRender):
                     with torch.no_grad():
                         outputs = pipeline.model.get_outputs_for_camera_ray_bundle(ray_bundle)
 
+                    if self.save_hash_random:
+                        assert isinstance(config.pipeline.model, InstantNGPModelConfig)
+
+                        field_outputs = outputs["field"]
+                        assert field_outputs[FieldHeadNames.RGB].shape[0] == field_outputs[FieldHeadNames.HASH].shape[0]
+                        population_size = field_outputs[FieldHeadNames.RGB].shape[0]
+
+                        # TODO: make these parameters variable
+                        sample_size = min(1920 * 1080, population_size)
+                        indices = torch.from_numpy(np.random.choice(population_size, sample_size))\
+                            .to(field_outputs[FieldHeadNames.RGB].device)
+
+                        # TODO: fix the hack in base_mode.py
+                        level_to_isolate = 1
+
+                        # prepare image
+                        # TODO: add an assert that features per level is 2
+                        _hash = field_outputs[FieldHeadNames.HASH][indices][:, level_to_isolate * 2 - 2:level_to_isolate * 2]
+                        _rgb = field_outputs[FieldHeadNames.RGB][indices]
+                        hash_space, hash_space_unique_map, hash_space_unique_counts = torch.unique(_hash, return_inverse=True, return_counts=True, dim=0)
+                        hash_space_unique_map = hash_space_unique_map.repeat(3, 1).T
+                        hash_space_rgb_output = torch.zeros((hash_space.shape[0], _rgb.shape[-1]),
+                                                            dtype=_rgb.dtype, device=_rgb.device)
+                        hash_space_rgb_output.scatter_add_(0, hash_space_unique_map, _rgb)
+                        hash_space_rgb_output /= hash_space_unique_counts[:, None]
+
+                        # normalize
+                        hash_space -= hash_space.min(dim=0).values
+                        hash_space /= hash_space.max(dim=0).values
+
+                        hash_space = hash_space.cpu().numpy()
+                        hash_space_rgb_output = hash_space_rgb_output.cpu().numpy()
+
+                        fig, ax = plt.subplots(dpi=720)
+                        ax.scatter(hash_space[:, 0], hash_space[:, 1], c=hash_space_rgb_output, s=(72./720)**2, marker=",", antialiased=False, linewidths=0)
+
+                        # save image
+                        image_name = (
+                            dataparser_outputs.image_filenames[camera_idx].with_suffix("").relative_to(images_root)
+                        )
+                        # TODO: variable extension types
+                        output_path = self.output_path / split / "save_hash_random" / image_name
+                        output_path.parent.mkdir(exist_ok=True, parents=True)
+                        fig.savefig(output_path.with_suffix(".jpg"))
+
+
                     gt_batch = batch.copy()
                     gt_batch["rgb"] = gt_batch.pop("image")
                     all_outputs = (
@@ -707,6 +762,9 @@ class DatasetRender(BaseRender):
                     if rendered_output_names is None:
                         rendered_output_names = ["gt-rgb"] + list(outputs.keys())
                     for rendered_output_name in rendered_output_names:
+                        if self.save_hash_random:
+                            break
+
                         if rendered_output_name not in all_outputs:
                             CONSOLE.rule("Error", style="red")
                             CONSOLE.print(

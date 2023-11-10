@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # os.system(command)
 
     # th
-    for th in range(2, 16, 2):
+    for th in range(2, 32, 2):
         command = get_command(th)
         logger.info(f"Executing {command}")
         os.system(command)
