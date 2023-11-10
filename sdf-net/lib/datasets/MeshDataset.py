@@ -83,7 +83,7 @@ class MeshDataset(Dataset):
             self.pts = point_sample(self.V, self.F, self.sample_mode, self.num_samples)
 
         self.d = compute_sdf(self.V.cuda(), self.F.cuda(), self.pts.cuda())   
-
+        
         self.d = self.d[...,None]
         self.d = self.d.cpu()
         self.pts = self.pts.cpu()
