@@ -323,12 +323,14 @@ class HashEncoding(Encoding):
         hash_init_scale: float = 0.001,
         implementation: Literal["tcnn", "torch"] = "tcnn",
         interpolation: Optional[Literal["Nearest", "Linear", "Smoothstep"]] = None,
+        hash_level_threshold: Optional[int] = None,
     ) -> None:
         super().__init__(in_dim=3)
         self.num_levels = num_levels
         self.features_per_level = features_per_level
         self.log2_hashmap_size = log2_hashmap_size
         self.hash_table_size = 2**log2_hashmap_size
+        self.hash_level_threshold = hash_level_threshold
 
         levels = torch.arange(num_levels)
         growth_factor = np.exp((np.log(max_res) - np.log(min_res)) / (num_levels - 1)) if num_levels > 1 else 1
@@ -435,8 +437,14 @@ class HashEncoding(Encoding):
 
     def forward(self, in_tensor: Float[Tensor, "*bs input_dim"]) -> Float[Tensor, "*bs output_dim"]:
         if self.tcnn_encoding is not None:
-            return self.tcnn_encoding(in_tensor)
-        return self.pytorch_fwd(in_tensor)
+            output = self.tcnn_encoding(in_tensor)
+        else:
+            output = self.pytorch_fwd(in_tensor)
+
+        if self.hash_level_threshold is not None:
+            output[:, self.hash_level_threshold:] = 0
+
+        return output
 
 
 class TensorCPEncoding(Encoding):

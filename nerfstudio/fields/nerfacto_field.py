@@ -96,6 +96,7 @@ class NerfactoField(Field):
         use_average_appearance_embedding: bool = False,
         spatial_distortion: Optional[SpatialDistortion] = None,
         implementation: Literal["tcnn", "torch"] = "tcnn",
+        hash_level_threshold: Optional[int] = None,
     ) -> None:
         super().__init__()
 
@@ -134,6 +135,7 @@ class NerfactoField(Field):
             log2_hashmap_size=log2_hashmap_size,
             features_per_level=features_per_level,
             implementation=implementation,
+            hash_level_threshold=hash_level_threshold,
         )
         self.mlp_base_mlp = MLP(
             in_dim=self.mlp_base_grid.get_out_dim(),

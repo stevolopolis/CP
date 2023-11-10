@@ -90,6 +90,8 @@ class InstantNGPModelConfig(ModelConfig):
     """The color that is given to untrained areas."""
     disable_scene_contraction: bool = False
     """Whether to disable scene contraction or not."""
+    hash_level_threshold: Optional[int] = None
+    """Zero out hash levels after threshold for base_mlp. If None, use max value."""
 
 
 class NGPModel(Model):
@@ -123,6 +125,7 @@ class NGPModel(Model):
             max_res=self.config.max_res,
             num_levels=self.config.num_levels,
             spatial_distortion=scene_contraction,
+            hash_level_threshold=self.config.hash_level_threshold,
         )
 
         self.scene_aabb = Parameter(self.scene_box.aabb.flatten(), requires_grad=False)

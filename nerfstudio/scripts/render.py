@@ -68,7 +68,7 @@ from nerfstudio.utils import colormaps, install_checks
 from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.utils.rich_utils import CONSOLE, ItersPerSecColumn
 from nerfstudio.utils.scripts import run_command
-
+from nerfstudio.models.instant_ngp import InstantNGPModelConfig
 
 def _render_trajectory_video(
     pipeline: Pipeline,
@@ -623,6 +623,8 @@ class DatasetRender(BaseRender):
     """Split to render."""
     rendered_output_names: Optional[List[str]] = field(default_factory=lambda: None)
     """Name of the renderer outputs to use. rgb, depth, raw-depth, gt-rgb etc. By default all outputs are rendered."""
+    hash_level_threshold: Optional[int] = None
+    """Zero out hash levels after threshold for base_mlp. If None, use max value."""
 
     def main(self):
         config: TrainerConfig
@@ -639,6 +641,10 @@ class DatasetRender(BaseRender):
             if self.downscale_factor is not None:
                 assert hasattr(data_manager_config.dataparser, "downscale_factor")
                 setattr(data_manager_config.dataparser, "downscale_factor", self.downscale_factor)
+            if self.hash_level_threshold is not None:
+                # TODO: this should be generalized to all models using NerfactoField
+                assert isinstance(config.pipeline.model, InstantNGPModelConfig)
+                config.pipeline.model.hash_level_threshold = self.hash_level_threshold
             return config
 
         config, pipeline, _, _ = eval_setup(
