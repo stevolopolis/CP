@@ -64,10 +64,9 @@ class Renderer():
         self.shadow = setparam(args, shadow, 'shadow')
         self.ao = setparam(args, ao, 'ao')
         self.perf = setparam(args, perf, 'perf')
-        self.device = setparam(args, device, 'device')
+        #self.device = setparam(args, device, 'device')
         
-        if self.device is None:
-            self.device = 'cuda'
+        self.device = 'cuda'
 
         self.width, self.height = self.render_res
 
@@ -100,9 +99,10 @@ class Renderer():
                                fov=fov, mode=camera_proj, device=device)
         # Rotate the camera into model space
         if mm is not None:
-            mm = mm.to('cuda')
+            mm = mm.to(device)
             ray_o = torch.mm(ray_o, mm)
             ray_d = torch.mm(ray_d, mm)
+            
         return self.render(net, ray_o, ray_d)
 
 
@@ -274,7 +274,7 @@ class Renderer():
             fov: field of view
             mm: model transformation matrix
         """
-        rb = self.render_lookat(net, f=f, t=t, fov=fov, mm=mm)
+        rb = self.render_lookat(net, f=f, t=t, fov=fov, mm=mm, device=self.device)
         # Shade the image
         if self.shading_mode == 'matcap':
             matcap = matcap_sampler(self.matcap_path)
@@ -287,7 +287,7 @@ class Renderer():
                 matcap_view = torch.mm(matcap_view.reshape(-1, 3), mm.transpose(1,0))
                 matcap_view = matcap_view.reshape(self.width, self.height, 3)
             vN = spherical_envmap(matcap_view, matcap_normal).cpu().numpy()
-            rb.rgb = torch.FloatTensor(matcap(vN).reshape(self.width, self.height, -1))[...,:3].cuda() / 255.0
+            rb.rgb = torch.FloatTensor(matcap(vN).reshape(self.width, self.height, -1))[...,:3].to(self.device) / 255.0
         elif self.shading_mode == 'rb':
             assert rb.rgb is not None and "No rgb in buffer; change shading-mode"
             pass
