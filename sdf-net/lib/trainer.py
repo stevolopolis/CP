@@ -187,6 +187,8 @@ class Trainer(object):
             self.optimizer = optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=0.8)
         else:
             raise ValueError('Invalid optimizer.')
+        
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.args.epochs, eta_min=1e-6)
 
     def set_renderer(self):
         """
@@ -338,6 +340,7 @@ class Trainer(object):
         # Backpropagate
         loss.backward()
         self.optimizer.step()
+        self.scheduler.step()
     
     #######################
     # post_epoch
