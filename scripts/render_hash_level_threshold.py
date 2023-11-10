@@ -21,12 +21,12 @@ def get_command(
 
 if __name__ == "__main__":
     # default
-    command = get_command()
-    logger.info(f"Executing {command}")
-    os.system(command)
+    # command = get_command()
+    # logger.info(f"Executing {command}")
+    # os.system(command)
 
     # th
-    for th in range(16):
-        command = get_command(th)
+    for th in range(15):
+        command = get_command(th + 1)
         logger.info(f"Executing {command}")
         os.system(command)
