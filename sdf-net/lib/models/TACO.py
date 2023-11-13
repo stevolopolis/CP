@@ -396,7 +396,7 @@ class TACO(BaseLOD):
 
         self.data_resolution = self.taco_configs.data_resolution
         #self.dimensions = self.taco_configs.dimensions # list of lists
-        self.dimensions = [[4,2,2,2,2,2,2,2,2],[4,2,2,2,2,2,2,2,2],[4,2,2,2,2,2,2,2,2]]
+        self.dimensions = [[4,4,4,2,2,2,2,2,2],[4,4,4,2,2,2,2,2,2],[4,4,4,2,2,2,2,2,2]]
         #self.dimensions = [[4,4,4,4,4,2,2],[4,4,4,4,4,2,2],[4,4,4,4,4,2,2]]
         #self.dimensions = [[16,8,8],[16,8,8],[16,8,8]]
         self.random_partition = False
@@ -450,10 +450,12 @@ class TACO(BaseLOD):
         cum_bases = [self.data_resolution // np.cumprod(self.dimensions[i]) for i in range(d)]
         ori_coords = [coords[..., i].unsqueeze(1) for i in range(d)]
         level_coords = []
-        for l in range(self.n_levels):
+        for l in range(self.n_levels-1):
             coords_l = [torch.floor_divide(ori_coords[i], cum_bases[i][l]) % self.dimensions[i][l] for i in range(d)]
             level_coords.append(torch.cat(coords_l, dim=-1))
 
+        coords_l = [ori_coords[i] for i in range(d)]
+        level_coords.append(torch.cat(coords_l, dim=-1))
         return torch.stack(level_coords, dim=1)                 
 
     def normalize_coords(self, coords):

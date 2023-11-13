@@ -156,6 +156,9 @@ class Trainer(object):
         
         self.train_data_loader = DataLoader(self.train_dataset, batch_size=self.args.batch_size, 
                                             shuffle=True, pin_memory=True, num_workers=0)
+                                            
+        self.val_data_loader = DataLoader(self.train_dataset, batch_size=50000, 
+                                            shuffle=True, pin_memory=True, num_workers=0)
         self.timer.check('create_dataloader')
         log.info("Loaded mesh dataset")
             
@@ -398,6 +401,8 @@ class Trainer(object):
         Override this function to change render logging.
         """
         self.net.eval()
+        if self.args.net == "NGP":
+            self.hash_visualizer(epoch)
         for d in range(self.args.num_lods):
             self.net.lod = d
             out = self.renderer.shade_images(self.net,
@@ -415,6 +420,40 @@ class Trainer(object):
             self.writer.add_image(f'Cross-section/Y/{d}', image_to_np(out_y), epoch)
             self.writer.add_image(f'Cross-section/Z/{d}', image_to_np(out_z), epoch)
             self.net.lod = None
+
+    def hash_visualizer(self, epoch):
+        import matplotlib.pyplot as plt
+
+        data = next(iter(self.val_data_loader))
+
+        pts = data[0].to(self.device)
+        gts = data[1].to(self.device)
+
+        plot_ls = []
+        # Get hashed coordinates (self.args.n_levels different levels)
+        hash_vals = self.net.hash_table(pts).detach().clone().cpu().numpy()
+        for i in range(self.args.n_levels):
+            c = gts - torch.min(gts)
+            c = c / torch.max(c)
+
+            hash_vertices = self.net.hash_table.embeddings[i].weight.data.clone().detach().cpu().numpy()
+            c = c.detach().cpu().numpy()
+            fig = plt.figure(figsize=(7, 7))
+            ax1 = fig.add_subplot(111)
+            ax1.scatter(hash_vals[:, 2*i], hash_vals[:, 2*i+1], c=c, cmap='viridis', alpha=0.5, s=0.5)
+            #ax1.scatter(hash_vertices[:, 0], hash_vertices[:, 1], c='r', alpha=1, s=2)
+            plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+            plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+            fig.tight_layout(pad=0)
+            fig.canvas.draw()
+            im = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            im = im.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+
+            self.writer.add_image(f'NGP_hash_space_{i}', im, epoch, dataformats='HWC')
+            plt.close()
+
+        return plot_ls
                 
     def save_model(self, epoch):
         """
