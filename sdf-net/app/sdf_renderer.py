@@ -31,6 +31,7 @@ import time
 from PIL import Image
 import numpy as np
 import torch
+from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 from tqdm import tqdm
 import moviepy.editor as mpy
@@ -42,6 +43,8 @@ from lib.models import *
 from lib.tracer import *
 from lib.options import parse_options
 from lib.geoutils import sample_unif_sphere, sample_fib_sphere, normalized_slice
+from lib.validator import *
+from lib.datasets import *
 
 
 def write_exr(path, data):
@@ -126,6 +129,22 @@ if __name__ == '__main__':
 
     tracer = globals()[args.tracer](args)
     renderer = Renderer(tracer, args=args, device=device)
+
+    # Validator
+    print("Evaluating trained model...")
+    train_dataset = globals()[args.mesh_dataset](args)
+    val_data_loader = DataLoader(train_dataset, batch_size=100000, 
+                                 shuffle=False, pin_memory=True, num_workers=0)
+    validator = globals()[args.validator](args, device, net, dataset=val_data_loader)
+    val_dict = validator.validate(0)
+    
+
+    for k, v in val_dict.items():
+        score_total = 0.0
+        for score in v:
+            score_total += score
+        print("%s | %s" % (k, score_total / len(v)))
+    
 
     if args.rotate is not None:
         rad = np.radians(args.rotate)
