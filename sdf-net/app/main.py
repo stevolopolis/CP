@@ -41,6 +41,7 @@ log.basicConfig(format='[%(asctime)s] [INFO] %(message)s',
 
 
 if __name__ == "__main__":
+    import wandb
     """Main program."""
 
     args, args_str = parse_options()
@@ -50,4 +51,15 @@ if __name__ == "__main__":
         device_id = args.device[-1]
         os.environ['CUDA_VISIBLE_DEVICES'] = device_id
     model = Trainer(args, args_str)
+
+    # wandb
+    if args.use_wandb:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            config=args,
+            group=args.wandb_group,
+            name=args.exp_name,
+        )
+
     model.train()

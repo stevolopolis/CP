@@ -20,6 +20,8 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import torch
+import random
+from torch.utils.data import DataLoader    
 
 def compute_iou(dist_gt, dist_pr):
     """Intersection over Union.
@@ -37,4 +39,25 @@ def compute_iou(dist_gt, dist_pr):
 
     iou = area_intersect / area_union
     return 100. * iou
+
+
+def tv_loss_fn(net, device):
+    """Total variance loss of sdf"""
+    # pts.shape = [1024, 1024, 1024, 3]
+    random_idx = random.random() - 0.5
+    pts = torch.stack(torch.meshgrid([torch.linspace(random_idx, random_idx+0.125, 64) for _ in range(3)]), dim=-1).to(device)
+    # Reshape pts to (1024**3, 3)
+    pts = pts.view(-1, 3)
+    #data_loader = DataLoader(pts, batch_size=256**2, shuffle=False)
+    # Inference
+    preds = net.sdf(pts)
+    # Reshape preds to [1024, 1024, 1024, 1]
+    preds = preds.view(64, 64, 64, 1)
+    # Calculate tv loss
+    tv_x = torch.pow(preds[1:, :, :, :] - preds[:-1, :, :, :], 2).sum()
+    tv_y = torch.pow(preds[:, 1:, :, :] - preds[:, :-1, :, :], 2).sum()
+    tv_z = torch.pow(preds[:, :, 1:, :] - preds[:, :, :-1, :], 2).sum()
+    loss = (tv_x + tv_y + tv_z) / (64**3)
+
+    return loss
 

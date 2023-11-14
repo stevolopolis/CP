@@ -35,12 +35,15 @@ from lib.validator.metrics import *
 class GeometricValidator(object):
     """Geometric validation; sample 3D points for distance/occupancy metrics."""
 
-    def __init__(self, args, device, net):
+    def __init__(self, args, device, net, dataset=None):
         self.args = args
         self.device = device
         self.net = net
         self.num_samples = 100000
-        self.set_dataset()
+        if dataset is None:
+            self.set_dataset()
+        else:
+            self.val_data_loader = dataset
 
     
     def set_dataset(self):
@@ -62,16 +65,15 @@ class GeometricValidator(object):
         # Uniform points metrics
         for n_iter, data in enumerate(self.val_data_loader):
 
-            ids = data[0].to(self.device)
-            pts = data[1].to(self.device)
-            gts = data[2].to(self.device)
-            nrm = data[3].to(self.device) if self.args.get_normals else None
+            #ids = data[0].to(self.device)
+            pts = data[0].to(self.device)
+            gts = data[1].to(self.device)
 
             for d in range(self.args.num_lods):
                 self.net.lod = d
 
                 # Volumetric IoU
-                pred = self.net(pts, gts=gts, grad=nrm, ids=ids)
+                pred = self.net(pts)
                 val_dict['vol_iou'] += [float(compute_iou(gts, pred))]
                 self.net.lod = None
 
