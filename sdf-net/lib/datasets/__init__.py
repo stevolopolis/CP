@@ -20,4 +20,5 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from .MeshDataset import MeshDataset
+from .AltDataset import AltDataset
 

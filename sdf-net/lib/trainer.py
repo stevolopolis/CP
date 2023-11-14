@@ -20,6 +20,7 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+import wandb
 import argparse
 from datetime import datetime
 import glob
@@ -49,6 +50,7 @@ from lib.renderer import Renderer
 from lib.tracer import *
 from lib.utils import PerfTimer, image_to_np, suppress_output
 from lib.validator import *
+from lib.validator.metrics import tv_loss_fn
 
 class Trainer(object):
     """
@@ -151,14 +153,15 @@ class Trainer(object):
         """
 
         self.train_dataset = globals()[self.args.mesh_dataset](self.args)
+        self.val_dataset = globals()[self.args.mesh_dataset](self.args, validation=True)
 
         log.info("Dataset Size: {}".format(len(self.train_dataset)))
         
         self.train_data_loader = DataLoader(self.train_dataset, batch_size=self.args.batch_size, 
                                             shuffle=True, pin_memory=True, num_workers=0)
                                             
-        self.val_data_loader = DataLoader(self.train_dataset, batch_size=50000, 
-                                            shuffle=True, pin_memory=True, num_workers=0)
+        self.val_data_loader = DataLoader(self.val_dataset, batch_size=100000, 
+                                            shuffle=False, pin_memory=True, num_workers=0)
         self.timer.check('create_dataloader')
         log.info("Loaded mesh dataset")
             
@@ -220,7 +223,7 @@ class Trainer(object):
         Override this function to use custom validators.
         """
         if self.args.validator is not None:
-            self.validator = globals()[self.args.validator](self.args, self.device, self.net)
+            self.validator = globals()[self.args.validator](self.args, self.device, self.net, dataset=self.val_data_loader)
 
     #######################
     # pre_epoch
@@ -258,6 +261,7 @@ class Trainer(object):
         self.net.train()
         
         # Initialize the dict for logging
+        self.log_dict['tv_loss'] = 0
         self.log_dict['l2_loss'] = 0
         self.log_dict['total_loss'] = 0
         self.log_dict['total_iter_count'] = 0
@@ -308,7 +312,7 @@ class Trainer(object):
         pts = data[0].to(self.device)
         gts = data[1].to(self.device)
         nrm = data[2].to(self.device) if self.args.get_normals else None
-
+        
         # Prepare for inference
         batch_size = pts.shape[0]
         self.net.zero_grad()
@@ -333,7 +337,12 @@ class Trainer(object):
 
         loss += l2_loss
 
+        # TV loss
+        tv_loss = tv_loss_fn(self.net, device=self.device)
+        loss += tv_loss
+
         # Update logs
+        #self.log_dict['tv_loss'] += tv_loss.item()
         self.log_dict['l2_loss'] += _l2_loss.item()
         self.log_dict['total_loss'] += loss.item()
         self.log_dict['total_iter_count'] += batch_size
@@ -342,6 +351,7 @@ class Trainer(object):
 
         # Backpropagate
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.net.parameters(), 0.1)
         self.optimizer.step()
         self.scheduler.step()
     
@@ -388,13 +398,26 @@ class Trainer(object):
 
         self.log_dict['l2_loss'] /= self.log_dict['total_iter_count'] + 1e-6
         log_text += ' | l2 loss: {:>.3E}'.format(self.log_dict['l2_loss'])
+
+        self.log_dict['tv_loss'] /= self.log_dict['total_iter_count'] + 1e-6
+        log_text += ' | tv loss: {:>.3E}'.format(self.log_dict['tv_loss'])
         
-        self.writer.add_scalar('Loss/l2_loss', self.log_dict['l2_loss'], epoch)
+        #self.writer.add_scalar('Loss/l2_loss', self.log_dict['l2_loss'], epoch)
 
         log.info(log_text)
 
         # Log losses
-        self.writer.add_scalar('Loss/total_loss', self.log_dict['total_loss'], epoch)
+        #self.writer.add_scalar('Loss/total_loss', self.log_dict['total_loss'], epoch)
+
+        # For Wandb
+        wandb.log(
+            {
+                "Loss": self.log_dict['l2_loss'],
+                "TV Loss": self.log_dict['tv_loss'],
+                "Total Loss": self.log_dict['total_loss']
+            },
+            step=epoch
+        )
 
     def render_tb(self, epoch):
         """
@@ -409,17 +432,29 @@ class Trainer(object):
                                              f=self.args.camera_origin, 
                                              t=self.args.camera_lookat,
                                              fov=self.args.camera_fov).image().byte().numpy()
-            self.writer.add_image(f'Depth/{d}', out.depth.transpose(2,0,1), epoch)
-            self.writer.add_image(f'Hit/{d}', out.hit.transpose(2,0,1), epoch)
-            self.writer.add_image(f'Normal/{d}', out.normal.transpose(2,0,1), epoch)
-            self.writer.add_image(f'RGB/{d}', out.rgb.transpose(2,0,1), epoch)
+            #self.writer.add_image(f'Depth/{d}', out.depth.transpose(2,0,1), epoch)
+            #self.writer.add_image(f'Hit/{d}', out.hit.transpose(2,0,1), epoch)
+            #self.writer.add_image(f'Normal/{d}', out.normal.transpose(2,0,1), epoch)
+            #self.writer.add_image(f'RGB/{d}', out.rgb.transpose(2,0,1), epoch)
             out_x = self.renderer.sdf_slice(self.net, dim=0)
             out_y = self.renderer.sdf_slice(self.net, dim=1)
             out_z = self.renderer.sdf_slice(self.net, dim=2)
-            self.writer.add_image(f'Cross-section/X/{d}', image_to_np(out_x), epoch)
-            self.writer.add_image(f'Cross-section/Y/{d}', image_to_np(out_y), epoch)
-            self.writer.add_image(f'Cross-section/Z/{d}', image_to_np(out_z), epoch)
-            self.net.lod = None
+            #self.writer.add_image(f'Cross-section/X/{d}', image_to_np(out_x), epoch)
+            #self.writer.add_image(f'Cross-section/Y/{d}', image_to_np(out_y), epoch)
+            #self.writer.add_image(f'Cross-section/Z/{d}', image_to_np(out_z), epoch)
+            #self.net.lod = None
+
+            # For wandb
+            wandb.log(
+                {
+                    f"Normal/{d}": wandb.Image(out.normal),
+                    f"Hit/{d}": wandb.Image(out.hit),
+                    f"Cross-section/X/{d}": wandb.Image(image_to_np(out_x).transpose(1,2,0).clip(0, 1)),
+                    f"Cross-section/Y/{d}": wandb.Image(image_to_np(out_y).transpose(1,2,0).clip(0, 1)),
+                    f"Cross-section/Z/{d}": wandb.Image(image_to_np(out_z).transpose(1,2,0).clip(0, 1))
+                },
+                step=epoch
+            )
 
     def hash_visualizer(self, epoch):
         import matplotlib.pyplot as plt
@@ -530,14 +565,15 @@ class Trainer(object):
 
     def validate(self, epoch):
         
-        val_dict = self.validator.validate(epoch, self.loss_lods)
+        val_dict = self.validator.validate(epoch)
         
         log_text = 'EPOCH {}/{}'.format(epoch, self.args.epochs)
 
         for k, v in val_dict.items():
             score_total = 0.0
             for lod, score in zip(self.loss_lods, v):
-                self.writer.add_scalar(f'Validation/{k}/{lod}', score, epoch)
+                #self.writer.add_scalar(f'Validation/{k}/{lod}', score, epoch)
+                wandb.log({f'Validation/{k}/{lod}': score}, step=epoch)
                 score_total += score
             log_text += ' | {}: {:.2f}'.format(k, score_total / len(v))
         log.info(log_text)

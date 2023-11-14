@@ -37,11 +37,12 @@ def parse_options(return_parser=False):
                               help='Experiment name.')
     global_group.add_argument('--perf', action='store_true',
                               help='Use profiling.')
-    global_group.add_argument('--validator', type=str, default=None,
+    global_group.add_argument('--validator', type=str, default='GeometricValidator',
                               help='Run validation.')
+    global_group.add_argument('--validation', type=int, default=0, help='Whether this run is for validation')
     global_group.add_argument('--valid-only', action='store_true',
                               help='Run validation (and do not run training).')
-    global_group.add_argument('--valid-every', type=int, default=1,
+    global_group.add_argument('--valid-every', type=int, default=10,
                              help='Frequency of running validation.')
     global_group.add_argument('--debug', action='store_true',
                               help='Utility argument for debug output and viz.')
@@ -256,6 +257,16 @@ def parse_options(return_parser=False):
     renderer_group.add_argument('--shading-mode', type=str, default='matcap',
                                 help='Shading mode.')
     renderer_group.add_argument('--device', type=str)
+
+    # Arguments for wandb
+    wandb_group = parser.add_argument_group("wandb")
+    wandb_group.add_argument('--use-wandb', type=int, help='Whether to use W&B for logging (1: True; 0: False).')
+    wandb_group.add_argument('--wandb-project', type=str, default='sdf',
+                             help='Project name on W&B.')
+    wandb_group.add_argument('--wandb-entity', type=str, default='taco-wacv',
+                             help='Entity name on W&B.')
+    wandb_group.add_argument('--wandb-group', type=str, help='Group name on W&B.')
+    
 
     # Parse and run
     if return_parser:
