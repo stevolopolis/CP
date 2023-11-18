@@ -47,6 +47,8 @@ from nerfstudio.model_components.renderers import (
 from nerfstudio.models.base_model import Model, ModelConfig
 from nerfstudio.utils import colormaps
 
+from loguru import logger
+
 
 @dataclass
 class InstantNGPModelConfig(ModelConfig):
@@ -64,7 +66,7 @@ class InstantNGPModelConfig(ModelConfig):
     """Resolution of the grid used for the field."""
     grid_levels: int = 4
     """Levels of the grid used for the field."""
-    min_res: int = 16,
+    min_res: int = 16
     """Minimum resolution of the hashmap for the base mlp."""
     max_res: int = 2048
     """Maximum resolution of the hashmap for the base mlp."""
@@ -94,6 +96,8 @@ class InstantNGPModelConfig(ModelConfig):
     """Zero out hash levels after threshold for base_mlp. If None, use max value."""
     store_field: bool = False
     """Store field outputs."""
+    implementation: Literal["tcnn", "torch"] = "tcnn"
+    """Implementation to use for hashing."""
 
 
 class NGPModel(Model):
@@ -129,6 +133,7 @@ class NGPModel(Model):
             spatial_distortion=scene_contraction,
             hash_level_threshold=self.config.hash_level_threshold,
             store_field=self.config.store_field,
+            implementation=self.config.implementation,
         )
 
         self.scene_aabb = Parameter(self.scene_box.aabb.flatten(), requires_grad=False)
