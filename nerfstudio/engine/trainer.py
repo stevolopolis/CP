@@ -21,6 +21,7 @@ import dataclasses
 import functools
 import os
 import time
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -43,6 +44,8 @@ from rich import box, style
 from rich.panel import Panel
 from rich.table import Table
 from torch.cuda.amp.grad_scaler import GradScaler
+from nerfstudio.models.instant_ngp import NGPModel
+from loguru import logger
 
 TRAIN_INTERATION_OUTPUT = Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]
 TORCH_DEVICE = str
@@ -233,8 +236,28 @@ class Trainer:
                 self.base_dir / "dataparser_transforms.json"
             )
 
+        num_levels = None
+        hash_table = None
+        model = self.pipeline.model
         if self.config.ramp_up_single:
-            pass
+            assert isinstance(model, NGPModel)
+            assert model.config.implementation == "torch"
+
+            logger.info(f"Using ramp_up_single training mode")
+
+            num_levels = model.config.num_levels
+            hash_table = model.field.mlp_base_grid.hash_table
+
+        def determine_active_levels(step: int, num_iterations: int) -> torch.Tensor:
+            assert self.config.ramp_up_single
+            step = step - self._start_step
+            active_levels = torch.zeros(num_levels).to(bool).to(model.device)
+            if self.config.ramp_up_single:
+                to_activate = math.ceil(step / num_iterations * num_levels)
+                active_levels[to_activate] = True
+
+            return active_levels
+
 
         self._init_viewer_state()
         with TimeWriter(writer, EventName.TOTAL_TRAIN_TIME):
@@ -255,7 +278,12 @@ class Trainer:
                             )
 
                         # time the forward pass
+                        if self.config.ramp_up_single and self.local_rank == 0:
+                            active_levels = determine_active_levels(step, num_iterations)
+                            model.field.mlp_base_grid.update_active_levels(active_levels)
                         loss, loss_dict, metrics_dict = self.train_iteration(step)
+                        if self.config.ramp_up_single and self.local_rank == 0:
+                            model.field.mlp_base_grid.enforce_active_levels()
 
                         # training callbacks after the training iteration
                         for callback in self.callbacks:

@@ -34,6 +34,7 @@ from nerfstudio.utils.math import (
     generate_polyhedron_basis,
 )
 from nerfstudio.utils.printing import print_tcnn_speed_warning
+from loguru import logger
 
 
 class Encoding(FieldComponent):
@@ -340,6 +341,9 @@ class HashEncoding(Encoding):
 
         self.tcnn_encoding = None
         self.hash_table = torch.empty(0)
+        self.prev_hash_table = torch.empty(0)
+        self.active_levels = torch.empty(0)
+
         if implementation == "tcnn" and not TCNN_EXISTS:
             print_tcnn_speed_warning("HashEncoding")
             implementation = "torch"
@@ -364,11 +368,32 @@ class HashEncoding(Encoding):
             self.hash_table = torch.rand(size=(self.hash_table_size * num_levels, features_per_level)) * 2 - 1
             self.hash_table *= hash_init_scale
             self.hash_table = nn.Parameter(self.hash_table)
+            self.prev_hash_table = self.hash_table.clone()
+            self.active_levels = torch.ones(num_levels).to(bool).to(self.hash_table.device)
+            # !important TODO: save the initial hash table if we're ramping up
 
         if self.tcnn_encoding is None:
             assert (
                 interpolation is None or interpolation == "Linear"
             ), f"interpolation '{interpolation}' is not supported for torch encoding backend"
+
+    def update_active_levels(self, updated_active_levels: torch.Tensor):
+        updated_active_levels = updated_active_levels.to(self.active_levels.device)
+        n = self.active_levels.nelement()
+        if n == 0 or updated_active_levels == self.active_levels:
+            return
+        logger.debug(f"Updated active levels from {self.active_levels} to {updated_active_levels}")
+        self.active_levels = updated_active_levels
+
+    def enforce_active_levels(self):
+        """Copies levels that are not active in prev_hash_table to hash_table and updates prev_hash_table"""
+        if self.hash_table.nelement() == 0:
+            return
+        size = self.hash_table_size
+        for i in self.active_levels.nelement():
+            if not self.active_levels[i]:
+                self.hash_table[size * i:size * (i + 1)] = self.prev_hash_table[size * i:size * (i + 1)]
+        self.prev_hash_table = self.hash_table.clone()
 
     def get_out_dim(self) -> int:
         return self.num_levels * self.features_per_level
