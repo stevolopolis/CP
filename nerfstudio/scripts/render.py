@@ -737,8 +737,9 @@ class DatasetRender(BaseRender):
                         hash_space = hash_space.cpu().numpy()
                         hash_space_rgb_output = hash_space_rgb_output.cpu().numpy()
 
-                        fig, ax = plt.subplots(dpi=720)
-                        ax.scatter(hash_space[:, 0], hash_space[:, 1], c=hash_space_rgb_output, s=(72./720)**2, marker=",", antialiased=False, linewidths=0)
+                        # TODO: variable resolution
+                        fig, ax = plt.subplots(dpi=1200)
+                        ax.scatter(hash_space[:, 0], hash_space[:, 1], c=hash_space_rgb_output, s=(72./1200)**2, marker=",", antialiased=False, linewidths=0)
 
                         # save image
                         image_name = (

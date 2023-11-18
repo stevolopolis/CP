@@ -83,6 +83,8 @@ class TrainerConfig(ExperimentConfig):
     """Optionally log gradients during training"""
     gradient_accumulation_steps: int = 1
     """Number of steps to accumulate gradients over."""
+    ramp_up_single: bool = False
+    """Ramp up by training one hash level at a time, from lowest to highest."""
 
 
 class Trainer:
@@ -231,10 +233,14 @@ class Trainer:
                 self.base_dir / "dataparser_transforms.json"
             )
 
+        if self.config.ramp_up_single:
+            pass
+
         self._init_viewer_state()
         with TimeWriter(writer, EventName.TOTAL_TRAIN_TIME):
             num_iterations = self.config.max_num_iterations
             step = 0
+
             for step in range(self._start_step, self._start_step + num_iterations):
                 while self.training_state == "paused":
                     time.sleep(0.01)
