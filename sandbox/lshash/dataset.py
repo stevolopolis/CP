@@ -7,6 +7,9 @@ import torchvision.transforms as T
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset, default_collate
 
+NUM_HASHES = 32
+HASH_SIZE = 8
+
 
 class SingleImageDataset(Dataset):
 
@@ -15,26 +18,35 @@ class SingleImageDataset(Dataset):
         image = Image.open(ROOT / path)
 
         image = T.ToTensor()(image)
-        image = einops.rearrange(image, "c y x -> x y c")
-        self.W, self.H, _ = image.shape
+        _, self.H, self.W = image.shape
+        colors = einops.rearrange(image, "d h w -> (h w) d")
 
-        x, y = torch.meshgrid(
-            torch.linspace(-1, 1, self.W),
-            torch.linspace(-1, 1, self.H),
+        y, x = torch.meshgrid(
+            torch.arange(self.H),
+            torch.arange(self.W),
             indexing="ij",
         )
-        coords = torch.stack([x, y], dim=-1)
-        assert coords.shape[:2] == image.shape[:2]
+        coords = torch.stack([y, x], dim=-1)
+        coords = einops.rearrange(coords, "h w d -> (h w) d")
 
-        self.coords = einops.rearrange(coords, "w h d -> (w h) d")
-        self.image = einops.rearrange(image, "w h d -> (w h) d")
+        self.coords = coords
+        self.colors = colors
+
+        # Minhash
+        bounds = torch.tensor([self.H, self.W])
+        pixels = torch.cat([coords / bounds, colors], dim=-1)  # (N 5)
+        planes = torch.rand([5, NUM_HASHES * HASH_SIZE]) - 0.5  # (5 HxD)
+        bins = (pixels @ planes) > 0  # (N HxD)
+        bins = einops.rearrange(bins, "n (h d) -> n h d", h=NUM_HASHES, d=HASH_SIZE)
+        hashes = torch.sum((2 ** torch.arange(HASH_SIZE)) * bins, dim=-1)
+        self.hashes = hashes
 
     def __len__(self):
         return 1
 
     def __getitem__(self, item):
         assert item == 0
-        return self.coords, self.image
+        return self.coords, self.colors, self.hashes
 
 
 class SingleImageDataModule(pl.LightningDataModule):
@@ -43,6 +55,7 @@ class SingleImageDataModule(pl.LightningDataModule):
         super().__init__()
 
         self.dataset = SingleImageDataset(path)
+        self.shape = (self.dataset.H, self.dataset.W)
 
     def train_dataloader(self):
         return DataLoader(

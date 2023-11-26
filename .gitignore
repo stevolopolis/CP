@@ -160,5 +160,5 @@ cython_debug/
 .idea/
 
 # Project-specific
-sandbox/triangular/images/
-sandbox/triangular/wandb/
+sandbox/lshash/images/
+sandbox/lshash/wandb/

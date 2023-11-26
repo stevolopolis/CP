@@ -4,11 +4,11 @@ import lightning.pytorch as pl
 import pydantic_cli
 from lightning.pytorch.loggers import WandbLogger
 
-from sandbox.triangular.dataset import SingleImageDataModule
-from sandbox.triangular.lit import LitDelaunayNGP, LitDelaunayNGPConfig
+from sandbox.lshash.dataset import SingleImageDataModule
+from sandbox.lshash.lit import LitNGPConfig, LitNGP
 
 
-class TrainDelaunayNGPConfig(LitDelaunayNGPConfig):
+class TrainDelaunayNGPConfig(LitNGPConfig):
     #
     seed: int = 100
     accelerator: str = "cpu"
@@ -50,10 +50,11 @@ def train(config: TrainDelaunayNGPConfig):
 
     # Load dataset
     image = SingleImageDataModule(path=cfg.image_path)
+    cfg.image_shape = image.shape
 
     # Initialize and load model
     # We use dict(cfg) so checkpointing does not rely on TrainDelaunayNGPConfig
-    model = LitDelaunayNGP(config=dict(cfg))
+    model = LitNGP(config=dict(cfg))
 
     # Initialize trainer
     if cfg.wandb:
