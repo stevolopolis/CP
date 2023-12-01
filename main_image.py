@@ -2,7 +2,8 @@ import torch
 import numpy as np
 
 from argparse import ArgumentParser
-import os, sys
+import os
+import sys
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
@@ -14,12 +15,14 @@ import pprint
 import random
 
 from data import ImageFile, PointCloud, BigImageFile, CIFAR10, CameraDataset
+from loguru import logger
 
 
 MEGAPIXELS = ["pluto", "tokyo", "mars"]
-BASE_PATH = "/home/steven/datasets"
+BASE_PATH = os.environ["BASE_PATH"]
 
 random.seed(21)
+
 
 def get_data(dataset, batch_size, coord_mode='0', idx=None):
     if dataset == "FFHQ":
@@ -125,7 +128,7 @@ def main():
                 # Define path where model will be saved
                 args.model_path = Path(wandb.run.dir) / "model.pt"
 
-            #trainer = siren.Trainer(dataset, data_shape, args)
+            # trainer = siren.Trainer(dataset, data_shape, args)
             trainer = MODE.Trainer(dataset, data_shape, args)
             print("Model parameters: ", trainer.get_model_size())
 
@@ -147,7 +150,8 @@ def main():
                 wandb.save(str(args.model_path.absolute()), base_path=wandb.run.dir, policy="live")
                 wandb.finish()
 
-            #input("Continue?")
+            # input("Continue?")
+
 
 if __name__ == "__main__":
     main()

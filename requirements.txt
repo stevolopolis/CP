@@ -5,4 +5,5 @@ scikit-image
 pillow
 numpy
 wandb
-urllib
+urllib3
+loguru
