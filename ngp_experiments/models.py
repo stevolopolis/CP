@@ -83,16 +83,18 @@ class HashEmbedder(nn.Module):
     def forward(self, x):
         # x is 2D point position: B x 2
         x_embedded_all = []
+        hashed_grid_indices_all = []
         for i in range(self.n_levels):
             resolution = torch.floor(self.base_resolution * self.b**i)
             grid_min_vertex, grid_max_vertex, hashed_grid_indices = self.get_grid_vertices(x, resolution)
+            hashed_grid_indices_all.append(hashed_grid_indices)
             #print(torch.min(hashed_grid_indices), torch.max(hashed_grid_indices))
             grid_embedds = self.embeddings[i](hashed_grid_indices)
 
             x_embedded = self.bilinear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
             x_embedded_all.append(x_embedded)
 
-        return torch.cat(x_embedded_all, dim=-1)
+        return torch.cat(x_embedded_all, dim=-1), hashed_grid_indices_all
 
     def get_grid_vertices(self, xy, resolution):
         '''
@@ -142,7 +144,6 @@ class ConsistentHashEmbedder(HashEmbedder):
         super().__init__(*args, **kwargs)
 
         # for verification purposes
-        self.first_time = True
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # track gradient accumulation
@@ -153,15 +154,20 @@ class ConsistentHashEmbedder(HashEmbedder):
                 start_level = level
                 break
         self.start_level = start_level
-        self.table_grad_accum = torch.zeros(
-            (self.n_levels - self.start_level, 2 ** self.log2_hashmap_size),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.denom = torch.zeros_like(self.table_grad_accum)
+        self.first_time = [True for _ in range(self.start_level, self.n_levels)]
+        # need a list for this, since each level's embedding shape may change
+        self.table_grad_accum = [
+            torch.zeros(
+                2 ** self.log2_hashmap_size,
+                dtype=torch.float32,
+                device=self.device,
+            )
+            for _ in range(self.start_level, self.n_levels)
+        ]
+        self.denom = [torch.zeros_like(self.table_grad_accum[0]) for _ in range(self.start_level, self.n_levels)]
 
-        # Initialize circle
-        # Multiply coordinates in {0, ..., resolution}^2 by this to convert to position on circle
+        # initialize circle
+        # multiply coordinates in {0, ..., resolution}^2 by this to convert to position on circle
         self.index_to_radians = 2 * torch.pi / 2 ** self.log2_hashmap_size
         resolutions = []
         self.resolution_map = {}
@@ -219,24 +225,19 @@ class ConsistentHashEmbedder(HashEmbedder):
         # wrap around
         key[key == target_key.nelement()] = 0
         value = self.target_value[level][key]
-        if self.first_time:
-            self.first_time = False
+        if self.first_time[level]:
+            self.first_time[level] = False
             assert torch.all(spatial_hash == value)
         return value
 
+    def update_table_grad_accum(self, i, mask: torch.Tensor):
+        norm_grad = self.embeddings[i + self.start_level].weight.grad.norm(dim=-1)
+        self.table_grad_accum[i][mask] += norm_grad[mask]
+        self.denom[i][mask] += 1
 
-    def update_table_grad_accum(self, mask: torch.Tensor):
-        norm_grads = []
-        for level in range(self.start_level, self.n_levels):
-            norm_grad = self.embeddings[level].weight.grad.norm().unsqueeze(0)
-            norm_grads.append(norm_grad)
-        norm_grads = torch.cat(norm_grads)
-        self.table_grad_accum[mask] += norm_grads[mask]
-        self.denom[mask] += 1
-
-    def reset_table_grad_accum(self):
-        self.table_grad_accum *= 0
-        self.denom *= 0
+    def reset_table_grad_accum(self, i):
+        self.table_grad_accum[i] *= 0
+        self.denom[i] *= 0
 
 class NGP(nn.Module):
     def __init__(self,
@@ -268,11 +269,11 @@ class NGP(nn.Module):
 
     def forward(self, x, hash=True):
         if hash:
-            x = self.hash_table(x)
+            x, hashed_grid_indices = self.hash_table(x)
             
         output = self.net(x)
 
-        return output
+        return output, hashed_grid_indices
 
 """
 class TinyHashEmbedder(nn.Module):

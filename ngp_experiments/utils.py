@@ -17,6 +17,8 @@ import configparser
 import argparse
 
 from loguru import logger
+import io
+import matplotlib.pyplot as plt
 
 
 def load_config(configfile):
@@ -80,7 +82,7 @@ class Trainer(AbstractTrainer):
         for it in range(1, self.args.iterations + 1):
             x, y = next(iter(self.loader))
             # load data, pass through model, get loss
-            preds = self.model(x.to(self.args.device))
+            preds, hashed_grid_indices = self.model(x.to(self.args.device))
 
             loss = ((preds - y.to(self.args.device)) ** 2).mean()
             psnr = -10*np.log10(loss.item())
@@ -88,6 +90,16 @@ class Trainer(AbstractTrainer):
             # backprop
             self.opt.zero_grad()
             loss.backward()
+
+            # update table grad accum
+            if self.args.consistent:
+                hash_table = self.model.hash_table
+                for i in range(hash_table.start_level, hash_table.n_levels):
+                    hgi_unique = hashed_grid_indices[i].unique()
+                    mask = torch.zeros_like(hash_table.table_grad_accum[i - hash_table.start_level]).to(bool)
+                    mask[hgi_unique] = True
+                    hash_table.update_table_grad_accum(i - hash_table.start_level, mask)
+
             self.opt.step()
             self.scheduler.step()
 
@@ -108,7 +120,12 @@ class Trainer(AbstractTrainer):
                         predicted_img = self.generate_image(gt=True)
                     else:
                         predicted_img = self.generate_image(gt=False)
-                    
+
+                    if self.args.consistent:
+                        table_grad_accum_plots = self.table_grad_accum_visualizer()
+                        for i, grad_accum_plot in enumerate(table_grad_accum_plots):
+                            log_dict[f"table_grad_accum_level_{i + self.model.hash_table.start_level}"] \
+                                = wandb.Image(grad_accum_plot)
                     mlp_space = self.mlp_space_visualizer()
                     hash_plot_ls = self.hash_visualizer()
                     for i, hash_plot in enumerate(hash_plot_ls):
@@ -122,6 +139,9 @@ class Trainer(AbstractTrainer):
         return losses
     
     def train_megapixels(self):
+        if self.args.consistent:
+            raise NotImplementedError
+
         losses = []
         psnrs = []
         #ssims = []
@@ -217,14 +237,11 @@ class Trainer(AbstractTrainer):
         self.model.load_state_dict(torch.load(model_path, map_location=self.args.device))
 
     def hash_visualizer(self):
-        import io
-        import matplotlib.pyplot as plt
-
         x, y = next(iter(self.loader))
         
         plot_ls = []
         # Get hashed coordinates (self.args.n_levels different levels)
-        hash_vals = self.model.hash_table(x.to(self.args.device)).detach().clone().cpu().numpy()
+        hash_vals = self.model.hash_table(x.to(self.args.device))[0].detach().clone().cpu().numpy()
         for i in range(self.args.n_levels):
             if torch.min(y) < 0:
                 c = y / 2 + 0.5
@@ -248,11 +265,32 @@ class Trainer(AbstractTrainer):
     
     def locate_hash_vertices(self, level):
         return self.model.hash_table.embeddings[level].weight.data.clone().detach().cpu().numpy()
+
+    def table_grad_accum_visualizer(self):
+        assert self.args.consistent
+        plots = []
+        hash_table = self.model.hash_table
+        denoms = hash_table.denom
+        table_grad_accum = hash_table.table_grad_accum
+        for i in range(len(table_grad_accum)):
+            fig, ax = plt.subplots()
+            denom = denoms[i]
+            grads = table_grad_accum[i]
+            grads = grads / denom
+            grads[grads.isnan()] = 0
+            ax.bar(np.arange(len(grads)), grads.detach().cpu().numpy())
+            img_buf = io.BytesIO()
+            fig.savefig(img_buf, format='png')
+            im = Image.open(img_buf)
+            plots.append(im)
+
+        return plots
+
     
     def mlp_space_visualizer(self):
         x, y = next(iter(self.loader))
         # Get hashed coordinates (self.args.n_levels different levels)
-        hash_vals = self.model.hash_table(x.to(self.args.device))
+        hash_vals = self.model.hash_table(x.to(self.args.device))[0]
         for i in range(1):
             hash_min_x = hash_vals[:, 2*i].min().item()
             hash_max_x = hash_vals[:, 2*i].max().item()
@@ -289,7 +327,7 @@ def get_img_pred(model, loader, img_shape, device="cuda", gt=False):
         if gt:
             pred = y.detach().cpu().numpy()
         else:
-            pred = model(x.to(device)).clamp(-1,1)
+            pred = model(x.to(device))[0].clamp(-1,1)
             pred = pred.detach().cpu().numpy()
     
     # reshape, convert to image, return
