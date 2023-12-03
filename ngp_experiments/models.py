@@ -105,9 +105,9 @@ class HashEmbedder(nn.Module):
         bottom_left_idx = torch.floor(torch.div(xy, grid_size)).int()
         grid_min_vertex = torch.mul(bottom_left_idx, grid_size)
         grid_max_vertex = grid_min_vertex + grid_size
-        
+
         grid_indices = bottom_left_idx.unsqueeze(1) + self.grid_offset.to(xy.device)
-        if resolution**2 < self.hashmap_sizes:
+        if (resolution + 1) ** 2 <= self.hashmap_sizes:
             hash_grid_indices = self.one2one_hash(grid_indices, resolution)
         # If hash table is not injective (i.e. number of grid vertices > hash table size)
         else:
@@ -131,6 +131,112 @@ class HashEmbedder(nn.Module):
     def one2one_hash(self, coords, resolution):
         new_coords = coords[..., 0]*resolution + coords[..., 1]
         return new_coords.type(torch.int)
+
+
+class ConsistentHashEmbedder(HashEmbedder):
+    """Notes:
+        - Consistent hashing: https://en.wikipedia.org/wiki/Consistent_hashing
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # for verification purposes
+        self.first_time = True
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # track gradient accumulation
+        start_level = 0
+        for level in range(self.n_levels):
+            resolution = torch.floor(self.base_resolution * self.b ** level).item()
+            if (resolution + 1) ** 2 > self.hashmap_sizes:
+                start_level = level
+                break
+        self.start_level = start_level
+        self.table_grad_accum = torch.zeros(
+            (self.n_levels - self.start_level, 2 ** self.log2_hashmap_size),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.denom = torch.zeros_like(self.table_grad_accum)
+
+        # Initialize circle
+        # Multiply coordinates in {0, ..., resolution}^2 by this to convert to position on circle
+        self.index_to_radians = 2 * torch.pi / 2 ** self.log2_hashmap_size
+        resolutions = []
+        self.resolution_map = {}
+        for level in range(self.start_level, self.n_levels):
+            resolution = torch.floor(self.base_resolution * self.b ** level).item()
+            resolutions.append(resolution)
+            self.resolution_map[resolution] = level
+
+        target_key = []  # location on unit circle
+        target_value = []  # index in embedding
+        for i, resolution in enumerate(resolutions):
+            x, y = torch.meshgrid(torch.arange(resolution + 1), torch.arange(resolution + 1), indexing="xy")
+            xy = torch.stack([x, y], dim=-1).view(-1, 2).to(self.device)
+            xy_hashed = self.hash(xy.to(int))
+            xy_hashed_radians = xy_hashed * self.index_to_radians
+            # sort xy_hashed_radians and bring xy_hashed with it
+            xy_hashed_radians, from_index = torch.sort(xy_hashed_radians)
+            xy_hashed = xy_hashed[from_index]
+            assert torch.all(0 <= xy_hashed_radians) and torch.all(xy_hashed_radians < 2 * torch.pi)
+            target = (xy_hashed_radians + torch.cat([xy_hashed_radians[1:], torch.tensor([2 * torch.pi],
+                                                                                          device=self.device)])) / 2
+            target_key.append(target)
+            target_value.append(xy_hashed)
+
+        self.target_key = target_key
+        self.target_value = target_value
+
+    def get_grid_vertices(self, xy, resolution):
+        '''
+        xy: 2D coordinates of samples. B x 2
+        resolution: number of grids per axis
+        '''
+        x_grid_size = self.img_w / resolution
+        y_grid_size = self.img_h / resolution
+        grid_size = torch.tensor([y_grid_size, x_grid_size]).to(xy.device)
+        bottom_left_idx = torch.floor(torch.div(xy, grid_size)).int()
+        grid_min_vertex = torch.mul(bottom_left_idx, grid_size)
+        grid_max_vertex = grid_min_vertex + grid_size
+
+        grid_indices = bottom_left_idx.unsqueeze(1) + self.grid_offset.to(xy.device)
+        if (resolution + 1) ** 2 <= self.hashmap_sizes:
+            hash_grid_indices = self.one2one_hash(grid_indices, resolution)
+        # If hash table is not injective (i.e. number of grid vertices > hash table size)
+        else:
+            hash_grid_indices = self.consistent_hash(grid_indices, resolution)
+
+        return grid_min_vertex, grid_max_vertex, hash_grid_indices
+
+    def consistent_hash(self, coords, resolution):
+        level = self.resolution_map[resolution.item()] - self.start_level
+        spatial_hash = self.hash(coords)
+        target_query = spatial_hash * self.index_to_radians
+        target_key = self.target_key[level]
+        key = torch.searchsorted(target_key, target_query)
+        # wrap around
+        key[key == target_key.nelement()] = 0
+        value = self.target_value[level][key]
+        if self.first_time:
+            self.first_time = False
+            assert torch.all(spatial_hash == value)
+        return value
+
+
+    def update_table_grad_accum(self, mask: torch.Tensor):
+        norm_grads = []
+        for level in range(self.start_level, self.n_levels):
+            norm_grad = self.embeddings[level].weight.grad.norm().unsqueeze(0)
+            norm_grads.append(norm_grad)
+        norm_grads = torch.cat(norm_grads)
+        self.table_grad_accum[mask] += norm_grads[mask]
+        self.denom[mask] += 1
+
+    def reset_table_grad_accum(self):
+        self.table_grad_accum *= 0
+        self.denom *= 0
 
 class NGP(nn.Module):
     def __init__(self,

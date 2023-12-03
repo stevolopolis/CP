@@ -11,10 +11,12 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 
 from utils import AbstractTrainer
-from ngp_experiments.models import HashEmbedder, NGP
+from ngp_experiments.models import HashEmbedder, ConsistentHashEmbedder, NGP
 
 import configparser
 import argparse
+
+from loguru import logger
 
 
 def load_config(configfile):
@@ -32,6 +34,7 @@ def load_config(configfile):
     config.feature_dim = int(config_dict['HASH']['feature_dim'])
     config.base_resolution = int(config_dict['HASH']['base_resolution'])
     config.finest_resolution = int(config_dict['HASH']['finest_resolution'])
+    config.consistent = int(config_dict['HASH']['consistent'])
     
     config.dim_in = int(config_dict['NETWORK']['dim_in'])
     config.dim_out = int(config_dict['NETWORK']['dim_out'])
@@ -54,7 +57,6 @@ def load_config(configfile):
     config.log_dir = "logs"
     
     return config
-
 
 
 class Trainer(AbstractTrainer):
@@ -179,7 +181,13 @@ class Trainer(AbstractTrainer):
         return model
     
     def get_hasher(self):
-        hasher = HashEmbedder(self.img_shape,
+        if self.args.consistent:
+            logger.info(f"Using consistent hashing")
+            hashing_mode = ConsistentHashEmbedder
+        else:
+            logger.info(f"Using base hashing")
+            hashing_mode = HashEmbedder
+        hasher = hashing_mode(self.img_shape,
                               n_levels=self.args.n_levels,
                               n_features_per_level=self.args.feature_dim,
                               log2_hashmap_size=self.args.log2_n_features,
