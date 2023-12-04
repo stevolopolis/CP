@@ -181,14 +181,14 @@ class ConsistentHashEmbedder(HashEmbedder):
         for i, resolution in enumerate(resolutions):
             x, y = torch.meshgrid(torch.arange(resolution + 1), torch.arange(resolution + 1), indexing="xy")
             xy = torch.stack([x, y], dim=-1).view(-1, 2).to(self.device)
-            xy_hashed = self.hash(xy.to(int))
-            xy_hashed_radians = xy_hashed * self.index_to_radians
+            # integer hash
+            xy_hashed = self.hash_integer(xy.to(int))
+            xy_hashed_radians = xy_hashed.to(torch.float64) * self.index_to_radians
             # sort xy_hashed_radians and bring xy_hashed with it
             xy_hashed_radians, from_index = torch.sort(xy_hashed_radians)
             xy_hashed = xy_hashed[from_index]
-            assert torch.all(0 <= xy_hashed_radians) and torch.all(xy_hashed_radians < 2 * torch.pi)
-            target = (xy_hashed_radians + torch.cat([xy_hashed_radians[1:], torch.tensor([2 * torch.pi],
-                                                                                          device=self.device)])) / 2
+            target = xy_hashed_radians + self.index_to_radians
+            assert torch.all(0 < target) and torch.all(target <= 2 * torch.pi)
             target_key.append(target)
             target_value.append(xy_hashed)
 
@@ -216,6 +216,49 @@ class ConsistentHashEmbedder(HashEmbedder):
 
         return grid_min_vertex, grid_max_vertex, hash_grid_indices
 
+    def hash(self, coords):
+        '''
+        coords: this function can process upto 7 dim coordinates
+        log2T:  logarithm of T w.r.t 2
+        '''
+        hash = self.hash_integer(coords) + self.hash_decimal(coords)
+        assert torch.all(hash < (1 << self.log2_hashmap_size))
+
+        return hash
+
+    def hash_integer(self, coords):
+        '''
+        coords: this function can process upto 7 dim coordinates
+        log2T:  logarithm of T w.r.t 2
+        '''
+        primes = [1, 2654435761, 805459861, 3674653429, 2097192037, 1434869437, 2165219737]
+
+        xor_result = torch.zeros_like(coords)[..., 0]
+        for i in range(coords.shape[-1]):
+            xor_result ^= coords[..., i]*primes[i]
+
+        return torch.tensor((1 << self.log2_hashmap_size)-1).to(xor_result.device) & xor_result
+
+    def hash_decimal(self, coords):
+        '''
+        coords: this function can process upto 6 dim coordinates
+        log2T:  logarithm of T w.r.t 2
+        '''
+        log2_decimal_size = 12
+        pad = 1.0 / (1 << (log2_decimal_size + 1))
+
+        primes = [2654435761, 805459861, 3674653429, 2097192037, 1434869437, 2165219737]
+
+        xor_result = torch.zeros_like(coords)[..., 0]
+        for i in range(coords.shape[-1]):
+            xor_result ^= coords[..., i]*primes[i]
+
+        decimal = (torch.tensor((1 << log2_decimal_size)-1).to(xor_result.device) & xor_result).to(torch.float64) / (1 << log2_decimal_size)
+        decimal = decimal + pad
+        assert torch.all(decimal > 0) and torch.all(decimal < 1)
+
+        return decimal
+
     def consistent_hash(self, coords, resolution):
         level = self.resolution_map[resolution.item()] - self.start_level
         spatial_hash = self.hash(coords)
@@ -223,12 +266,18 @@ class ConsistentHashEmbedder(HashEmbedder):
         target_key = self.target_key[level]
         key = torch.searchsorted(target_key, target_query)
         # wrap around
-        key[key == target_key.nelement()] = 0
+        # key[key == target_key.nelement()] = 0
         value = self.target_value[level][key]
         if self.first_time[level]:
             self.first_time[level] = False
-            assert torch.all(spatial_hash == value)
+            assert torch.all(value == self.hash_integer(coords))
         return value
+
+    def densify(self, densify_grad_threshold=3e-6):
+        for i in range(len(self.table_grad_accum)):
+            level = i + self.start_level
+            accum = self.table_grad_accum[i]
+
 
     def update_table_grad_accum(self, i, mask: torch.Tensor):
         norm_grad = self.embeddings[i + self.start_level].weight.grad.norm(dim=-1)

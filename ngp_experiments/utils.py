@@ -166,6 +166,9 @@ class Trainer(AbstractTrainer):
                 instance_mse += mse.sum().item()
                 n += len(x)
 
+                if it % 500 == 0 and self.args.consistent:
+                    self.model.hash_table.densify()
+
             instance_loss = instance_mse / n
             instance_psnr = -10*np.log10(instance_loss)
             losses.append(instance_loss)
@@ -278,7 +281,7 @@ class Trainer(AbstractTrainer):
             grads = table_grad_accum[i]
             grads = grads / denom
             grads[grads.isnan()] = 0
-            ax.bar(np.arange(len(grads)), grads.detach().cpu().numpy())
+            ax.bar(np.arange(len(grads)), grads.detach().cpu().sort()[0].numpy())
             img_buf = io.BytesIO()
             fig.savefig(img_buf, format='png')
             im = Image.open(img_buf)
