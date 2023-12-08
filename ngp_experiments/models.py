@@ -178,6 +178,9 @@ class ConsistentHashEmbedder(HashEmbedder):
 
         target_key = []  # location on unit circle
         target_value = []  # index in embedding
+
+        target_average = []
+
         for i, resolution in enumerate(resolutions):
             x, y = torch.meshgrid(torch.arange(resolution + 1), torch.arange(resolution + 1), indexing="xy")
             xy = torch.stack([x, y], dim=-1).view(-1, 2).to(self.device)
@@ -192,8 +195,14 @@ class ConsistentHashEmbedder(HashEmbedder):
             target_key.append(target)
             target_value.append(xy_hashed)
 
+            target_average.append(
+                torch.zeros((len(target_key), 2), dtype=torch.float, device=self.device)
+            )
+
         self.target_key = target_key
         self.target_value = target_value
+
+        self.target_average = target_average
 
     def get_grid_vertices(self, xy, resolution):
         '''
@@ -273,11 +282,68 @@ class ConsistentHashEmbedder(HashEmbedder):
             assert torch.all(value == self.hash_integer(coords))
         return value
 
-    def densify(self, densify_grad_threshold=3e-6):
+    def densify(self, densify_grad_threshold=None):
+        """If densify_grad_threshold is not set, remove anything above two standard deviations past mean"""
         for i in range(len(self.table_grad_accum)):
+            # setup
             level = i + self.start_level
-            accum = self.table_grad_accum[i]
+            accum = self.table_grad_accum[i] / self.denom[i]
+            if i == 0:
+                print(f"num_nan={accum.isnan().sum()}")
 
+            accum[accum.isnan()] = 0
+
+            if i == 0:
+                print(f"mu={accum.mean()}, sigma={accum.var() ** 0.5}, range={accum.min(), accum.max()}, num_zero={(accum == 0).nonzero().shape}")
+
+            # set threshold to anything above mu + 2 * sigma
+            if densify_grad_threshold is None:
+                mu = accum.mean()
+                sigma = accum.var() ** 0.5
+                densify_grad_threshold = mu + 1.5 * sigma
+
+            target_key = self.target_key[i]
+            target_value = self.target_value[i]
+            sorted_target_value, from_index = torch.sort(target_value)
+
+            # densify
+            large_accum_index = (accum > densify_grad_threshold).nonzero().flatten()
+
+            if len(large_accum_index) == 0:
+                return
+
+            target_index = from_index[torch.searchsorted(sorted_target_value, large_accum_index)]
+            assert target_index.max() < len(sorted_target_value)
+            # TODO: treat edge case
+            shifted_target_index = (target_index - 1).clamp(0, len(sorted_target_value) - 1)
+            midpoints = (target_key[target_index] + target_key[shifted_target_index]) / 2
+            num_new_entries = len(midpoints)
+            start_new_entries = sorted_target_value[-1] + 1
+            end_new_entries = start_new_entries + num_new_entries  # not including
+            assert start_new_entries == self.embeddings[level].weight.shape[0]
+            # NOTE: target_key must be in sorted order
+            target_key = torch.cat([target_key, midpoints])
+            target_value = torch.cat([target_value, torch.arange(
+                start_new_entries, end_new_entries, device=target_value.device, dtype=target_value.dtype)])
+            target_key, from_index = torch.sort(target_key)
+            target_value = target_value[from_index]
+            self.embeddings[level].weight = nn.Parameter(torch.cat([
+                self.embeddings[level].weight,
+                torch.zeros((num_new_entries, self.n_features_per_level),
+                            device=self.embeddings[level].weight.device,
+                            dtype=self.embeddings[level].weight.dtype),
+            ]))
+            self.table_grad_accum[i] = torch.cat([self.table_grad_accum[i],
+                                                  torch.arange(start_new_entries, end_new_entries,
+                                                               device=self.table_grad_accum[i].device,
+                                                               dtype=self.table_grad_accum[i].dtype),])
+            self.denom[i] = torch.cat([self.denom[i], torch.arange(start_new_entries, end_new_entries,
+                                                                   device=self.denom[i].device,
+                                                                   dtype=self.denom[i].dtype), ])
+            # update values
+            self.target_key[i] = target_key
+            self.target_value[i] = target_value
+            self.reset_table_grad_accum(i)
 
     def update_table_grad_accum(self, i, mask: torch.Tensor):
         norm_grad = self.embeddings[i + self.start_level].weight.grad.norm(dim=-1)
@@ -287,6 +353,7 @@ class ConsistentHashEmbedder(HashEmbedder):
     def reset_table_grad_accum(self, i):
         self.table_grad_accum[i] *= 0
         self.denom[i] *= 0
+
 
 class NGP(nn.Module):
     def __init__(self,

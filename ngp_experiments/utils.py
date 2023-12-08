@@ -76,6 +76,8 @@ class Trainer(AbstractTrainer):
         self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
 
     def train(self):
+        densify_until_iter = 2000
+
         losses = []
         psnrs = []
         ssims = []
@@ -120,12 +122,6 @@ class Trainer(AbstractTrainer):
                         predicted_img = self.generate_image(gt=True)
                     else:
                         predicted_img = self.generate_image(gt=False)
-
-                    if self.args.consistent:
-                        table_grad_accum_plots = self.table_grad_accum_visualizer()
-                        for i, grad_accum_plot in enumerate(table_grad_accum_plots):
-                            log_dict[f"table_grad_accum_level_{i + self.model.hash_table.start_level}"] \
-                                = wandb.Image(grad_accum_plot)
                     mlp_space = self.mlp_space_visualizer()
                     hash_plot_ls = self.hash_visualizer()
                     for i, hash_plot in enumerate(hash_plot_ls):
@@ -134,7 +130,32 @@ class Trainer(AbstractTrainer):
                     log_dict["Reconstruction"] = wandb.Image(predicted_img)
                     self.save_model()
 
+                if it % 100 == 0 and self.args.consistent:
+                    table_grad_accum_plots = self.table_grad_accum_visualizer()
+                    for i, grad_accum_plot in enumerate(table_grad_accum_plots):
+                        log_dict[f"table_grad_accum_level_{i + self.model.hash_table.start_level}"] \
+                            = wandb.Image(grad_accum_plot)
+
                 wandb.log(log_dict, step=it)
+
+            if it < densify_until_iter and it % 500 == 0 and self.args.consistent:
+                self.model.hash_table.densify()
+
+                # self.model.hash_table.embeddings[0].weight = torch.nn.Parameter(
+                #     torch.zeros_like(self.model.hash_table.embeddings[0].weight)
+                # )
+                # self.model.hash_table.embeddings[1].weight = torch.nn.Parameter(
+                #     torch.zeros_like(self.model.hash_table.embeddings[1].weight)
+                # )
+                # self.opt = Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.99), eps=1e-15)
+
+                self.opt = Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.99), eps=1e-15)
+                self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
+
+            # 100 iterations to settle down
+            if it % 250 == 0 and self.args.consistent:
+                for i in range(len(self.model.hash_table.table_grad_accum)):
+                    self.model.hash_table.reset_table_grad_accum(i)
 
         return losses
     
@@ -286,6 +307,7 @@ class Trainer(AbstractTrainer):
             fig.savefig(img_buf, format='png')
             im = Image.open(img_buf)
             plots.append(im)
+            plt.close(fig)
 
         return plots
 
