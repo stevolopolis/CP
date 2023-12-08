@@ -54,6 +54,7 @@ def load_config(configfile):
     config.use_wandb = int(config_dict['WANDB']['use_wandb'])
     config.wandb_project = str(config_dict['WANDB']['wandb_project'])
     config.wandb_entity = str(config_dict['WANDB']['wandb_entity'])
+    config.experiment_name = str(config_dict['WANDB']['name'])
 
     config.save_dir = "results"
     config.log_dir = "logs"

@@ -95,15 +95,18 @@ def main():
             if common_arg.model in ['diner', 'siren']:
                 experiment_name = "%s_%s%s_run%s_layer%s_hidden%s_w_0%s" % (model_type, args.dataset, data_idx, run, args.n_layers, args.hidden_dim, args.w_0)
             elif common_arg.model in ['ngp']:
-                experiment_name = "%s_%s%s_L%s_nfeat%s_nlayer%s_hidden%s_%s-%s_v3" % (model_type,
-                                                                                    args.dataset,
-                                                                                    data_idx,
-                                                                                    args.n_levels,
-                                                                                    args.log2_n_features,
-                                                                                    args.n_layers,
-                                                                                    args.hidden_dim,
-                                                                                    args.base_resolution,
-                                                                                    args.finest_resolution)
+                if args.experiment_name != "":
+                    experiment_name = args.experiment_name
+                else:
+                    experiment_name = "%s_%s%s_L%s_nfeat%s_nlayer%s_hidden%s_%s-%s_v3" % (model_type,
+                                                                                        args.dataset,
+                                                                                        data_idx,
+                                                                                        args.n_levels,
+                                                                                        args.log2_n_features,
+                                                                                        args.n_layers,
+                                                                                        args.hidden_dim,
+                                                                                        args.base_resolution,
+                                                                                        args.finest_resolution)
 
             args.save_dir = os.path.join(args.save_dir, experiment_name)
             args.log_dir = os.path.join(args.log_dir, experiment_name)
