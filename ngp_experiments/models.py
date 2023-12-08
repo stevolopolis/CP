@@ -282,25 +282,23 @@ class ConsistentHashEmbedder(HashEmbedder):
             assert torch.all(value == self.hash_integer(coords))
         return value
 
-    def densify(self, densify_grad_threshold=None):
+    def densify(self):
         """If densify_grad_threshold is not set, remove anything above two standard deviations past mean"""
         for i in range(len(self.table_grad_accum)):
             # setup
             level = i + self.start_level
             accum = self.table_grad_accum[i] / self.denom[i]
-            if i == 0:
-                print(f"num_nan={accum.isnan().sum()}")
+
+            print(f"nan={accum.isnan().nonzero().sum()}")
 
             accum[accum.isnan()] = 0
-
-            if i == 0:
-                print(f"mu={accum.mean()}, sigma={accum.var() ** 0.5}, range={accum.min(), accum.max()}, num_zero={(accum == 0).nonzero().shape}")
-
             # set threshold to anything above mu + 2 * sigma
-            if densify_grad_threshold is None:
-                mu = accum.mean()
-                sigma = accum.var() ** 0.5
-                densify_grad_threshold = mu + 1.5 * sigma
+            mu = accum.mean()
+            sigma = accum.var() ** 0.5
+            densify_grad_threshold = mu + sigma
+
+            # do top 5 percent
+            densify_grad_threshold = torch.sort(accum)[0][int(len(accum) * 0.90)]
 
             target_key = self.target_key[i]
             target_value = self.target_value[i]
@@ -310,6 +308,7 @@ class ConsistentHashEmbedder(HashEmbedder):
             large_accum_index = (accum > densify_grad_threshold).nonzero().flatten()
 
             if len(large_accum_index) == 0:
+                print(f"RETURNED; {i}")
                 return
 
             target_index = from_index[torch.searchsorted(sorted_target_value, large_accum_index)]
@@ -340,6 +339,9 @@ class ConsistentHashEmbedder(HashEmbedder):
             self.denom[i] = torch.cat([self.denom[i], torch.arange(start_new_entries, end_new_entries,
                                                                    device=self.denom[i].device,
                                                                    dtype=self.denom[i].dtype), ])
+
+            print(f"more={len(self.table_grad_accum[i]) - 1024}")
+
             # update values
             self.target_key[i] = target_key
             self.target_value[i] = target_value

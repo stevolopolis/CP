@@ -77,7 +77,7 @@ class Trainer(AbstractTrainer):
         self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
 
     def train(self):
-        densify_until_iter = 1500
+        densify_until_iter = 2000
 
         losses = []
         psnrs = []
@@ -139,22 +139,26 @@ class Trainer(AbstractTrainer):
 
                 wandb.log(log_dict, step=it)
 
-            if it < densify_until_iter and it % 200 == 0 and self.args.consistent:
+            if it < densify_until_iter and it % 400 == 0 and self.args.consistent:
+                pass
                 self.model.hash_table.densify()
 
-                # self.model.hash_table.embeddings[0].weight = torch.nn.Parameter(
-                #     torch.zeros_like(self.model.hash_table.embeddings[0].weight)
-                # )
-                # self.model.hash_table.embeddings[1].weight = torch.nn.Parameter(
-                #     torch.zeros_like(self.model.hash_table.embeddings[1].weight)
-                # )
+                self.model.hash_table.embeddings[1].weight = torch.nn.Parameter(
+                    torch.zeros_like(self.model.hash_table.embeddings[1].weight)
+                )
+                self.model.hash_table.embeddings[2].weight = torch.nn.Parameter(
+                    torch.zeros_like(self.model.hash_table.embeddings[2].weight)
+                )
+                self.model.hash_table.embeddings[3].weight = torch.nn.Parameter(
+                    torch.zeros_like(self.model.hash_table.embeddings[3].weight)
+                )
                 # self.opt = Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.99), eps=1e-15)
 
                 self.opt = Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.99), eps=1e-15)
                 self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
 
             # 100 iterations to settle down
-            if it % 100 == 0 and self.args.consistent:
+            if it >= 400 and it % 100 == 0 and self.args.consistent:
                 for i in range(len(self.model.hash_table.table_grad_accum)):
                     self.model.hash_table.reset_table_grad_accum(i)
 
