@@ -76,7 +76,7 @@ class Trainer(AbstractTrainer):
         self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
 
     def train(self):
-        densify_until_iter = 2000
+        densify_until_iter = 1500
 
         losses = []
         psnrs = []
@@ -138,7 +138,7 @@ class Trainer(AbstractTrainer):
 
                 wandb.log(log_dict, step=it)
 
-            if it < densify_until_iter and it % 500 == 0 and self.args.consistent:
+            if it < densify_until_iter and it % 200 == 0 and self.args.consistent:
                 self.model.hash_table.densify()
 
                 # self.model.hash_table.embeddings[0].weight = torch.nn.Parameter(
@@ -153,7 +153,7 @@ class Trainer(AbstractTrainer):
                 self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
 
             # 100 iterations to settle down
-            if it % 250 == 0 and self.args.consistent:
+            if it % 100 == 0 and self.args.consistent:
                 for i in range(len(self.model.hash_table.table_grad_accum)):
                     self.model.hash_table.reset_table_grad_accum(i)
 
