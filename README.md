@@ -22,15 +22,15 @@ wandb_entity: utmist-parsimony
 Do not change `wandb_entity`, this is our base W&B directory. If you are running a big cluster of experiments that is working towards your own dedicated research question, create a new W&B project by specifying a different string for `wandb_project`. For any small PoC experiments, feel free to just dump it into `wandb_project: playground` with your group name specified in `main_image.py` (or other equivalent trainer files).
 
 ## Get started -- Data preparation
-All data are loaded using the function `get_data()` defined in `main_image.py`. All data should be stored in a common directory. Change the global variable `BASE_PATH` in `main_image.py` to the common directory once setup.
+All data are loaded using the function `get_data()` defined in `utils.py`. All data should be stored in a common directory. Change the global variable `BASE_PATH` in `main_image.py` to the common directory once setup.
 
 ## Get started -- train a new model
-```python main_image.py configs/<config.ini> <model_type>``` 
+```python main_cp_explorer.py configs/<config.ini> <model_type>``` 
 
 Several things are logged during training:
 - PSNR/SSIM
 - Hash map
-- MLP space (as defined in DINER paper; this visualization is not accurate as of the current iteration)
+- MLP space
 
 Trained models will be saved in the `results` folder.
 
@@ -43,15 +43,41 @@ For DINER:
 For NGP:
 - We visualize the effects of each individual level of hashing by zeroing out all but one level of hash values when feeding into the MLP. The visualization is the output of the MLP given this augmented set of hash values. 
 
-## Questions seeking answers
+## Status of the project
+**Done**
+- New framework of understanding: domain manipulation.
+    - applied to 1D signal and features and validated empirically
+    - somewhat easily generalizable to adding hashing
+
+**Lingering questions**
+- Function basis for translation domain ops to basis extensions
+- Explain clustering effect with domain manipulation framework
+- Extend to n-dimensional signals
+- Extend to n-dimensional features
+
+## Dump
+<details>
+<summary> Questions seeking answers (Legacy) </summary>
+
 - Coordinate permutation (CP) perspective in one resolution (observed; not proved yet)
+
 - How do we prove that NGP is doing CP instead of embedding learning? Or, is embedding learning = CP? We need a rigorous definition and explanation
+
 - CP when concatenated in multiple resolutions
+
 - CP on other hybrid methods
+
 - CP with or without hashing
+
 - CP in 3D or higher dimensions
+
 - CP param to expressivity trade-off (rigorous math)
+
 - Is hash embedding learning permuted coordinates or saving multi-resolution pixel values
+
 - Deformable NGP grid
+
 - CP as a constructive method of INRs
-    - Can expand a whole topic here…
+
+- Can expand a whole topic here…
+</details>
