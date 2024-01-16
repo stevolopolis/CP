@@ -1,9 +1,8 @@
 # Coordinate Permutation Is All You Need
 
 ## Structure of the repo
-- `main_image.py`: main() to train on 2D images
-- `main_sdf.py`: main() to train on 3D SDFs (under construction)
-- `hash_visualizer.py`: 
+- `main_cp_explorer.py`: main() to train on 2D images
+- `hash_visualizer.py`: contains functions to visualize trained models (not maintained)
 - `data.py`: dataLoaders
 - `<model_type>_experiments`: 
     - `models.py`: nn.modules
