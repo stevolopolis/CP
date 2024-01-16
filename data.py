@@ -1,5 +1,7 @@
 import errno
+import random
 import torch
+import sys
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
@@ -11,6 +13,7 @@ import numpy as np
 from PIL import Image
 import skimage
 import os
+import math
 
 import urllib3
 
@@ -74,12 +77,72 @@ class ImageFile(Dataset):
                 dim=-1,
             ).view(-1, 2)
 
+        self.img = self.transform(self.img).permute(1,2,0).view(-1, self.img_channels)
+
     def __len__(self):
         return 1
 
     def __getitem__(self, idx):
-        return self.coords, self.transform(self.img).permute(1,2,0).view(-1, self.img_channels)
+        return self.coords, self.img
     
+    def gauss_data(self):
+        self.img = torch.randn_like(self.img)
+
+    def scramble_data(self):
+        self.random_idx = torch.randperm(self.H*self.W)
+        self.img = self.img[self.random_idx]
+
+    def local_decolorize(self, patch_size=.1):
+        dim, x, y = self.get_local_patch_coords(patch_size)
+
+        self.img = self.img.view(self.H, self.W, self.img_channels)
+        self.img[x:x+dim, y:y+dim, :] = 0
+        self.img = self.img.view(-1, self.img_channels)
+    
+    def global_decolorize(self):
+        self.img = torch.zeros_like(self.img)
+
+    def local_color_shift(self, patch_size=.1, shift=.25):
+        dim, x, y = self.get_local_patch_coords(patch_size)
+
+        self.img = self.img.view(self.H, self.W, self.img_channels)
+        self.img[x:x+dim, y:y+dim, :] = self.img[x:x+dim, y:y+dim, :] * shift
+        self.img = self.img.view(-1, self.img_channels)
+
+    def global_color_shift(self, shift=.25):
+        self.img = self.img * shift
+
+    def disconnected_double_patch(self, patch_size=.1, exp_seed=0):
+        coords = self.get_n_local_patch_coords(patch_size, 2, exp_seed=exp_seed)
+        dim1_x, dim1_y, x1, y1 = coords[0]
+        dim2_x, dim2_y, x2, y2 = coords[1]
+
+        self.img = self.img.view(self.H, self.W, self.img_channels)
+        self.img[y1:y1+dim1_y, x1:x1+dim1_x, :] = torch.tensor([0.0, 1.0, 0.0])
+        self.img[y2:y2+dim2_y, x2:x2+dim2_x, :] = torch.tensor([0.0, 1.0, 0.0])
+        self.img = self.img.view(-1, self.img_channels)
+
+    def get_local_patch_coords(self, patch_size, x_pos='random'):
+        dim_x = int(self.W * patch_size)
+        dim_y = int(self.H * patch_size)
+        top_left_corner_y = random.randint(0, self.H - dim_y)
+        if x_pos == "random":
+            top_left_corner_x = random.randint(0, self.W - dim_x)
+        elif x_pos == "left":
+            top_left_corner_x = random.randint(0, (self.W - dim_x) // 2)
+        elif x_pos == "right":
+            top_left_corner_x = random.randint((self.W - dim_x) // 2, self.W - dim_x)
+        return dim_x, dim_y, top_left_corner_x, top_left_corner_y
+
+    def get_n_local_patch_coords(self, patch_size, n, exp_seed=0):
+        coords = []
+        seed = random.randrange(sys.maxsize)
+        for i in range(n):
+            random.seed(seed+i+exp_seed)
+            x_pos = "left" if i % 2 == 0 else "right"
+            coords.append(self.get_local_patch_coords(patch_size, x_pos))
+        return coords
+
     def get_img_h(self):
         return self.H
     
@@ -349,3 +412,94 @@ class PointCloud(Dataset):
 
     def get_pointcloud(self):
         return self.point_cloud[:, :3]
+
+
+class WaveFile(Dataset):
+    def __init__(self, size, coord_mode='1', wave_type=0, p1=None):
+        super().__init__()
+        self.size = size
+
+        if coord_mode == 0:
+            self.coords = torch.linspace(0.0, size, size)
+        elif coord_mode == 1:
+            self.coords = torch.linspace(-1.0, 1 - 1e-6, size)
+        elif coord_mode == 2:
+            self.coords = torch.linspace(0.0, 1 - 1e-6, size)
+
+        self.coords = self.coords.view(-1, 1)
+        self.data = self.wave_factory(self.coords, wave_type, p1)
+
+    def __len__(self):
+        return 1
+
+    def wave_factory(self, x, wave_type, n=None):
+        if wave_type == 0:
+            return self.generate_gauss_wave(x)
+        elif wave_type == 1:
+            return self.generate_square_wave(x, n)
+        elif wave_type == 2:
+            return self.generate_fourier_wave(x, n)
+        else:
+            raise NotImplementedError
+
+    def generate_gauss_wave(self, x):
+        data = torch.randn_like(x)
+        return data
+
+    def generate_square_wave(self, x, n):
+        if n is None: n = 2
+        domain_length = len(x)
+        max_interval = domain_length // n
+        data = torch.zeros_like(x)
+        for i in range(n):
+            random.seed(i)
+            interval = random.randint(0, max_interval)
+            start = random.randint(0, domain_length - interval)
+            val = random.randint(0, 255)
+            data[start:start + interval] = val
+
+        return data
+
+    def generate_fourier_wave(self, x, n):
+        if n is None: n = 10
+        data = torch.zeros_like(x)
+        for i in range(1, n + 1):
+            freq = 2 * math.pi * i
+            data += random.gauss(0.0, 1.0) * torch.sin(freq * x) / n
+
+        return data
+
+    def disconnected_double_patch(self, patch_size=.1, exp_seed=0):
+        coords = self.get_n_local_patch_coords(patch_size, 2, exp_seed=exp_seed)
+        val = random.random()
+        dim1_x, x1 = coords[0]
+        dim2_x, x2 = coords[1]
+
+        self.data[x1:x1+dim1_x, :] = val
+        self.data[x2:x2+dim2_x, :] = val
+
+    def get_local_patch_coords(self, patch_size, x_pos='random'):
+        dim_x = int(self.size * patch_size)
+        if x_pos == "random":
+            top_left_corner_x = random.randint(0, self.size - dim_x)
+        elif x_pos == "left":
+            top_left_corner_x = random.randint(0, (self.size - dim_x) // 2)
+        elif x_pos == "right":
+            top_left_corner_x = random.randint((self.size - dim_x) // 2, self.size - dim_x)
+        return dim_x, top_left_corner_x
+
+    def get_n_local_patch_coords(self, patch_size, n, exp_seed=0):
+        coords = []
+        seed = random.randrange(sys.maxsize)
+        for i in range(n):
+            random.seed(seed+i+exp_seed)
+            x_pos = "left" if i % 2 == 0 else "right"
+            coords.append(self.get_local_patch_coords(patch_size, x_pos))
+        return coords
+
+
+    def __getitem__(self, idx):
+        return self.coords, self.data
+    
+    def get_data_shape(self):
+        return (self.size, 1)
