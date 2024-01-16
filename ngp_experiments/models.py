@@ -30,8 +30,6 @@ class HashEmbedder(nn.Module):
                 log2_hashmap_size=19, base_resolution=16, finest_resolution=512):
         super(HashEmbedder, self).__init__()
         self.img_size = img_size
-        self.img_h = img_size[0]
-        self.img_w = img_size[1]
         self.n_levels = n_levels
         self.n_features_per_level = n_features_per_level
         self.log2_hashmap_size = log2_hashmap_size
@@ -40,9 +38,19 @@ class HashEmbedder(nn.Module):
         self.finest_resolution = torch.tensor(finest_resolution)
         self.out_dim = self.n_levels * self.n_features_per_level
 
-        self.grid_offset = torch.tensor([[i,j] for i in [0, 1] for j in [0, 1]])
+        if n_features_per_level > 1:
+            self.grid_offset = torch.stack(
+                torch.meshgrid(
+                    [torch.tensor([0, 1]) for _ in range(n_features_per_level)]
+                ), dim=-1,
+                ).view(-1, n_features_per_level)
+        else:
+            self.grid_offset = torch.tensor([[0], [1]])
 
-        self.b = torch.exp((torch.log(self.finest_resolution)-torch.log(self.base_resolution))/(n_levels-1))
+        if n_levels > 1:
+            self.b = torch.exp((torch.log(self.finest_resolution)-torch.log(self.base_resolution))/(n_levels-1))
+        else:
+            self.b = 1
 
         hash_list = []
         for i in range(n_levels):
@@ -80,33 +88,50 @@ class HashEmbedder(nn.Module):
 
         return c
 
+    def linear_interp(self, x, grid_min_vertex, grid_max_vertex, grid_embedds):
+        '''
+        x: B x 1
+        grid_min_vertex: B x 1
+        grid_max_vertex: B x 1
+        grid_embedds: B x 2 x 1
+        '''
+        weights = (x - grid_min_vertex)/(grid_max_vertex-grid_min_vertex)
+        c = grid_embedds[:, 0]*(1-weights) + grid_embedds[:, 1]*weights
+
+        return c
+
+    def interp(self, x, grid_min_vertex, grid_max_vertex, grid_embedds):
+        if self.n_features_per_level == 1:
+            return self.linear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+        elif self.n_features_per_level == 2:
+            return self.bilinear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+        else:
+            raise NotImplementedError
+
     def forward(self, x):
         # x is 2D point position: B x 2
         x_embedded_all = []
         for i in range(self.n_levels):
             resolution = torch.floor(self.base_resolution * self.b**i)
             grid_min_vertex, grid_max_vertex, hashed_grid_indices = self.get_grid_vertices(x, resolution)
-            #print(torch.min(hashed_grid_indices), torch.max(hashed_grid_indices))
             grid_embedds = self.embeddings[i](hashed_grid_indices)
 
-            x_embedded = self.bilinear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+            x_embedded = self.interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
             x_embedded_all.append(x_embedded)
 
         return torch.cat(x_embedded_all, dim=-1)
 
-    def get_grid_vertices(self, xy, resolution):
+    def get_grid_vertices(self, x, resolution):
         '''
-        xy: 2D coordinates of samples. B x 2
+        x: 2D coordinates of samples. B x 2
         resolution: number of grids per axis
         '''
-        x_grid_size = self.img_w/resolution
-        y_grid_size = self.img_h/resolution
-        grid_size = torch.tensor([y_grid_size, x_grid_size]).to(xy.device)
-        bottom_left_idx = torch.floor(torch.div(xy, grid_size)).int()
+        grid_size = torch.tensor([self.img_size[i] / resolution for i in range(self.n_features_per_level)]).to(x.device)
+        bottom_left_idx = torch.floor(torch.div(x, grid_size)).int()
         grid_min_vertex = torch.mul(bottom_left_idx, grid_size)
         grid_max_vertex = grid_min_vertex + grid_size
         
-        grid_indices = bottom_left_idx.unsqueeze(1) + self.grid_offset.to(xy.device)
+        grid_indices = bottom_left_idx.unsqueeze(1) + self.grid_offset.to(x.device)
         if resolution**2 < self.hashmap_sizes:
             hash_grid_indices = self.one2one_hash(grid_indices, resolution)
         # If hash table is not injective (i.e. number of grid vertices > hash table size)
@@ -129,7 +154,9 @@ class HashEmbedder(nn.Module):
         return torch.tensor((1<<self.log2_hashmap_size)-1).to(xor_result.device) & xor_result
 
     def one2one_hash(self, coords, resolution):
-        new_coords = coords[..., 0]*resolution + coords[..., 1]
+        new_coords = torch.zeros_like(coords[:, :, 0])
+        for i in range(self.n_features_per_level):
+            new_coords += coords[..., i] * resolution**(self.n_features_per_level-i-1)
         return new_coords.type(torch.int)
 
 class NGP(nn.Module):

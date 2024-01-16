@@ -6,6 +6,8 @@ from skimage.metrics import structural_similarity as ssim_func
 from skimage.metrics import peak_signal_noise_ratio as psnr_func
 
 import wandb
+import io
+import matplotlib.pyplot as plt
 
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
@@ -46,9 +48,15 @@ def load_config(configfile):
     config.model = str(config_dict['TRAINING']['model'])
     config.batch_size = int(config_dict['TRAINING']['batch_size'])
 
+    config.exp_seed = int(config_dict['EXPERIMENT']['exp_seed'])
+    config.exp_data_idx = int(config_dict['EXPERIMENT']['exp_data_idx'])
+    config.exp_type = int(config_dict['EXPERIMENT']['exp_type'])
+    config.exp_p1 = int(config_dict['EXPERIMENT']['exp_p1'])
+
     config.use_wandb = int(config_dict['WANDB']['use_wandb'])
     config.wandb_project = str(config_dict['WANDB']['wandb_project'])
     config.wandb_entity = str(config_dict['WANDB']['wandb_entity'])
+    config.wandb_group = str(config_dict['WANDB']['wandb_group'])
 
     config.save_dir = "results"
     config.log_dir = "logs"
@@ -103,12 +111,12 @@ class Trainer(AbstractTrainer):
                             'ssim': ssim}
                 if it % 500 == 1:
                     if it == 1:
-                        predicted_img = self.generate_image(gt=True)
+                        predicted_img = self.generate_image(self.args.dim_in, gt=True)
                     else:
-                        predicted_img = self.generate_image(gt=False)
+                        predicted_img = self.generate_image(self.args.dim_in, gt=False)
                     
-                    mlp_space = self.mlp_space_visualizer()
-                    hash_plot_ls = self.hash_visualizer()
+                    hash_plot_ls, hash_axis = self.hash_visualizer(self.args.dim_in)
+                    mlp_space = self.mlp_space_visualizer(hash_axis, self.args.dim_in)
                     for i, hash_plot in enumerate(hash_plot_ls):
                         log_dict[f"hash_space_{i}"] = wandb.Image(hash_plot)
                     log_dict["MLP_space"] = wandb.Image(mlp_space)
@@ -187,9 +195,16 @@ class Trainer(AbstractTrainer):
                               finest_resolution=self.args.finest_resolution)
         return hasher
 
-    def generate_image(self, gt=True):
-        predicted_img = get_img_pred(self.model, self.loader, self.img_shape, gt=gt, device=self.args.device)
-        output_image  = Image.fromarray((predicted_img*255).astype(np.uint8), mode='RGB')
+    def generate_image(self, dim, gt=True):
+        x, pred = get_img_pred(self.model, self.loader, self.img_shape, gt=gt, device=self.args.device)
+        if dim == 2:
+            output_image  = Image.fromarray((pred*255).astype(np.uint8), mode='RGB')
+        elif dim == 1:
+            plt.plot(x, pred)
+            img_buf = io.BytesIO()
+            plt.savefig(img_buf, format='png')
+            output_image = Image.open(img_buf)
+            plt.close()
 
         return output_image
     
@@ -208,13 +223,11 @@ class Trainer(AbstractTrainer):
     def load_model(self, model_path):
         self.model.load_state_dict(torch.load(model_path, map_location=self.args.device))
 
-    def hash_visualizer(self):
-        import io
-        import matplotlib.pyplot as plt
-
+    def hash_visualizer(self, dim):
         x, y = next(iter(self.loader))
         
         plot_ls = []
+        plot_axis = []
         # Get hashed coordinates (self.args.n_levels different levels)
         hash_vals = self.model.hash_table(x.to(self.args.device)).detach().clone().cpu().numpy()
         for i in range(self.args.n_levels):
@@ -224,72 +237,121 @@ class Trainer(AbstractTrainer):
                 c = y
             hash_vertices = self.locate_hash_vertices(i)
             c = c.detach().cpu().numpy()
-            fig = plt.figure(figsize=(7, 7))
-            ax1 = fig.add_subplot(111)
-            ax1.scatter(hash_vals[:, 2*i], hash_vals[:, 2*i+1], color=c, alpha=0.5, s=0.5)
-            ax1.scatter(hash_vertices[:, 0], hash_vertices[:, 1], color='r', alpha=1, s=2)
-            plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
-            plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-            img_buf = io.BytesIO()
-            plt.savefig(img_buf, format='png')
-            im = Image.open(img_buf)
-            plot_ls.append(im)
-            plt.close()
+            
+            if dim == 2:
+                im, ax_lims = self.hash_2d(hash_vals[:, 2*i:2*i+2], hash_vertices, c)
+            elif dim == 1:
+                im, ax_lims = self.hash_1d(x, hash_vals)
 
-        return plot_ls
+            plot_ls.append(im)
+            plot_axis.append(ax_lims)
+
+        return plot_ls, plot_axis
+
+    def hash_2d(self, hash_vals, hash_vertices, c):
+        fig = plt.figure(figsize=(7, 7))
+        ax1 = fig.add_subplot(111)
+        ax1.scatter(hash_vals[:, 0], hash_vals[:, 1], color=c, alpha=0.5, s=0.5)
+        ax1.scatter(hash_vertices[:, 0], hash_vertices[:, 1], color='r', alpha=1, s=2)
+        plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+        plt.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png')
+        im = Image.open(img_buf)
+
+        xl, xr = ax1.get_xlim()
+        yl, yr = ax1.get_ylim()
+
+        plt.close()
+
+        return im, [xl, xr, yl, yr]
+
+    def hash_1d(self, x, hash_vals):
+        xl = np.min(hash_vals)
+        xr = np.max(hash_vals)
+
+        plt.plot(hash_vals, x)
+
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png')
+        im = Image.open(img_buf)
+
+        plt.close()
+
+        return im, [xl, xr]
     
     def locate_hash_vertices(self, level):
         return self.model.hash_table.embeddings[level].weight.data.clone().detach().cpu().numpy()
     
-    def mlp_space_visualizer(self):
-        x, y = next(iter(self.loader))
-        # Get hashed coordinates (self.args.n_levels different levels)
-        hash_vals = self.model.hash_table(x.to(self.args.device))
-        for i in range(1):
-            hash_min_x = hash_vals[:, 2*i].min().item()
-            hash_max_x = hash_vals[:, 2*i].max().item()
-            hash_min_y = hash_vals[:, 2*i+1].min().item()
-            hash_max_y = hash_vals[:, 2*i+1].max().item()
+    def mlp_space_visualizer(self, axis, dim):
+        if dim == 2:
+            return self.mlp_2d(axis)
+        elif dim == 1:
+            return self.mlp_1d(axis)
+        else:
+            raise NotImplementedError
 
-            # Mesh based on hashed coordinates range
-            x_hashed_mesh = torch.stack(
-                    torch.meshgrid(
-                        [
-                            torch.linspace(hash_min_x, hash_max_x, self.img_shape[0]),
-                            torch.linspace(hash_max_y, hash_min_y, self.img_shape[1]),
-                        ]
-                    ),
-                    dim=-1,
-                ).view(-1, 2).to(self.args.device)
-            x_hashed_mesh_filler = torch.zeros_like(hash_vals).to(self.args.device)
-            x_hashed_mesh_filler[:, 2*i:2*i+2] = x_hashed_mesh
-            
-            # Generate learned INR  
-            preds = self.model.net(x_hashed_mesh_filler)
+    def mlp_2d(self, axis):
+        (xmin, xmax, ymin, ymax) = axis[0]
+        # Mesh based on hashed coordinates range
+        x_hashed_mesh = torch.stack(
+                torch.meshgrid(
+                    [
+                        torch.linspace(xmin, xmax, 512),
+                        torch.linspace(ymax, ymin, 512),
+                    ]
+                ),
+                dim=-1,
+            ).view(-1, 2).to(self.args.device)
+        # Generate learned INR  
+        preds = self.model.net(x_hashed_mesh)
+        preds = preds.clamp(-1, 1).detach().cpu().numpy()
+        if np.min(preds) < 0:
             preds = preds / 2 + 0.5
-            preds = preds.clamp(0, 1).detach().cpu().numpy()
-            preds = preds.reshape(self.img_shape)
-            preds = Image.fromarray((preds*255).astype(np.uint8), mode='RGB')
+        preds = preds.reshape((512, 512, 3))
+        preds = np.moveaxis(preds, 0, 1)
+        preds = Image.fromarray((preds*255).astype(np.uint8), mode='RGB')
 
         return preds
+
+    def mlp_1d(self, axis):
+        (xmin, xmax) = axis[0]
+        # Mesh based on hashed coordinates range
+        x_hashed_mesh = torch.linspace(xmin, xmax, 512).view(-1, 1).to(self.args.device)
+        # Generate learned INR  
+        preds = self.model.net(x_hashed_mesh)
+        preds = preds.clamp(-1, 1).detach().cpu().numpy()
+        if np.min(preds) < 0:
+            preds = preds / 2 + 0.5
+        plt.plot(x_hashed_mesh.detach().cpu().numpy(), preds)
+
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png')
+        im = Image.open(img_buf)
+
+        plt.close()
+
+        return im
 
 
 def get_img_pred(model, loader, img_shape, device="cuda", gt=False):
     # predict
     with torch.no_grad():
         x, y = next(iter(loader))
+        y = y.detach().cpu().numpy()
         if gt:
-            pred = y.detach().cpu().numpy()
+            pred = y
         else:
             pred = model(x.to(device)).clamp(-1,1)
             pred = pred.detach().cpu().numpy()
     
     # reshape, convert to image, return
     pred = pred.reshape(img_shape)
-    if np.min(pred) < 0:
+    if np.min(y) < 0:
         pred = pred / 2 + 0.5
 
-    return pred
+    return x, pred
 
 
 def get_megaimg_pred(model, loader, img_shape, device="cuda", gt=False):
