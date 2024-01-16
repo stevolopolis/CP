@@ -66,6 +66,26 @@ def load_config(configfile):
 
 
 class Trainer(AbstractTrainer):
+    """
+    Trainer class for NGP model.
+
+    Major functions implementations:
+        - train(): trains the NGP on 1D waves or 2D images
+        - generate_image(): generates an image from the trained model (inferencing)
+        - hash_visualizer(): visualize the hashing (aka key-value pair mapping)
+            * hash_2d(): for 2D images
+            * hash_1d(): for 1D waves
+        - mlp_space_visualizer(): visualize the MLP part of the model
+            * mlp_2d(): for 2D images
+            * mlp_1d(): for 1D waves
+        
+    Minor functions:
+        - get_model()
+        - get_hasher()
+        - save_model()
+        - load_model()
+
+    """
     def __init__(self, loader, img_shape, args):
         self.loader = loader
         self.img_shape = img_shape
@@ -74,7 +94,6 @@ class Trainer(AbstractTrainer):
 
         self.hasher = self.get_hasher()
         self.model = self.get_model(self.hasher).to(self.args.device)
-        #self.model = torch.nn.DataParallel(self.model).to(self.args.device)
 
         self.opt = Adam(self.model.parameters(), lr=self.args.lr, betas=(0.9, 0.99), eps=1e-15)
         self.scheduler = StepLR(self.opt, step_size=1000, gamma=0.1)
@@ -127,56 +146,6 @@ class Trainer(AbstractTrainer):
 
         return losses
     
-    def train_megapixels(self):
-        losses = []
-        psnrs = []
-        #ssims = []
-        for it in range(1, self.args.iterations + 1):
-            instance_mse = 0
-            n = 0
-            iter_loader = iter(self.loader)
-            for batch in range(len(self.loader)):
-                x, y = next(iter_loader)
-                # load data, pass through model, get loss
-                preds = self.model(x.to(self.args.device))
-
-                mse = (preds - y.to(self.args.device)) ** 2
-                loss = mse.mean()
-
-                # backprop
-                self.opt.zero_grad()
-                loss.backward()
-                self.opt.step()
-                self.scheduler.step()
-                
-                instance_mse += mse.sum().item()
-                n += len(x)
-
-            instance_loss = instance_mse / n
-            instance_psnr = -10*np.log10(instance_loss)
-            losses.append(instance_loss)
-            psnrs.append(instance_psnr)
-            #ssims.append(ssim)
-
-            if self.args.use_wandb:
-                log_dict = {"loss": instance_loss,
-                            "psnr": instance_psnr}
-                if it % 50 == 1:
-                    if it == 1:
-                        print("generating image...")
-                        predicted_img, ssim = self.generate_megaimage(gt=True)
-                    else:
-                        predicted_img, ssim = self.generate_megaimage(gt=False)
-                    
-                    log_dict["Reconstruction"] = wandb.Image(predicted_img)
-                    log_dict["ssim"] = ssim
-
-                wandb.log(log_dict, step=it)
-                self.save_model()
-
-        return losses
-    
-    
     def get_model(self, hasher):
         model = NGP( 
             hash_table = hasher,
@@ -208,14 +177,6 @@ class Trainer(AbstractTrainer):
 
         return output_image
     
-    def generate_megaimage(self, gt=False):
-        predicted_img, ssim = get_megaimg_pred(self.model, self.loader, self.img_shape, gt=gt)
-        output_image  = Image.fromarray((predicted_img*255).astype(np.uint8))
-        resize_x = 512
-        resize_y = int(self.img_shape[1] / self.img_shape[0] * 512)
-
-        return output_image.resize((resize_x, resize_y), Image.Resampling.NEAREST), ssim
-
     def save_model(self):
         torch.save(self.model.state_dict(), os.path.join(self.args.save_dir, f"trained_model_{self.args.model}.pt"))
         print("Saved checkpoint at %s" % str(os.path.join(self.args.save_dir, f"trained_model_{self.args.model}.pt")))
@@ -353,35 +314,3 @@ def get_img_pred(model, loader, img_shape, device="cuda", gt=False):
 
     return x, pred
 
-
-def get_megaimg_pred(model, loader, img_shape, device="cuda", gt=False):
-    # predict
-    empty_image = torch.zeros(img_shape).to(device)
-    empty_image_gt = torch.zeros(img_shape).to(device)
-    with torch.no_grad():
-        iter_loader = iter(loader)
-        for batch in range(len(loader)):
-            x, y = next(iter_loader)
-            if gt:
-                pred = y.to(device)
-            else:
-                pred = model(x.to(device)).clamp(-1,1)
-
-            # Unnormalized coords
-            x0_coord = x[:, 0].type(torch.long)
-            x1_coord = x[:, 1].type(torch.long)
-            # Normalized coords in range [-1, 1]
-            #x0_coord = torch.round((x[:, 0] * 0.5 + 0.5) * img_shape[0]).long().clamp(0, img_shape[0]-1)
-            #x1_coord = torch.round((x[:, 1] * 0.5 + 0.5) * img_shape[1]).long().clamp(0, img_shape[1]-1)
-
-            empty_image[x0_coord, x1_coord] = pred.clamp(0, 1)  #(pred * 0.5 + 0.5).clamp(0, 1)
-            empty_image_gt[x0_coord, x1_coord] = y.to(device).clamp(0, 1)
-
-    empty_image = empty_image.detach().cpu().numpy()
-    empty_image_gt = empty_image_gt.detach().cpu().numpy()
-    ssim = ssim_func(empty_image, empty_image_gt, data_range=2, channel_axis=-1)
-            
-    if gt:
-        return empty_image_gt, ssim
-    else:
-        return empty_image, ssim
