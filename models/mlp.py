@@ -79,3 +79,10 @@ class MLP(nn.Module):
     def forward(self, x, labels=None):
         x = self.net(x)
         return self.last_layer(x)
+    
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)

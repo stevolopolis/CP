@@ -1,24 +1,30 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.stats import pearsonr   
 
 
-def plot_sim_score_loss_corr(sim_score, loss_score, save_path=None):
+def plot_sim_score_loss_corr_combined(sim_score, loss_score, save_path=None):
     """Scatter plot of similarity score vs loss score"""
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    # Correlation plot for slopes
-    ax[0].scatter(sim_score[:, 0], loss_score)
-    ax[0].set_xlabel('Similarity score (slope)')
-    ax[0].set_ylabel('Loss score')
-    ax[0].set_title('Similarity score (slope) vs Loss score')
-    # Correlation plot for y-intercepts
-    ax[1].scatter(sim_score[:, 1], loss_score)
-    ax[1].set_xlabel('Similarity score (y-int)')
-    ax[1].set_ylabel('Loss score')
-    ax[1].set_title('Similarity score (y-int) vs Loss score')
+    
+    corr = pearsonr(sim_score, loss_score)
+
+    plt.scatter(sim_score, loss_score)
+    plt.xlabel('Similarity score')
+    plt.ylabel('Loss score')
+    plt.title('Similarity score vs Loss score\n(corr: %0.2f, prob null: %0.2f)' % (corr[0], corr[1]))
+
+    plt.ylim(0, max(loss_score) * 1.25)
+
+    for i in range(len(sim_score)):
+        plt.annotate(i, (sim_score[i], loss_score[i]))
+
     if save_path is not None:
         plt.savefig(save_path)
+        print("Saved to %s" % save_path)
     else:
         plt.show()
+
+    plt.close()
 
 
 def load_sim_score_loss_corr(sim_score_path, loss_score_path):
@@ -29,10 +35,20 @@ def load_sim_score_loss_corr(sim_score_path, loss_score_path):
 
 
 if __name__ == '__main__':
-    n_pieces = 1
-    sim_loss_corr_save_path = "vis/sim_loss_corr_%s.png" % n_pieces
+    n_pieces = 7
+    dynamic = True
+    model = 'relu'
 
-    sim_score, loss_score = load_sim_score_loss_corr("logs/sim_scores_relu_knots_%s.npy" % n_pieces, "logs/losses_relu_dummy.npy")
-    loss_score[-2] = loss_score[-3]
-    sim_score[-2, :] = sim_score[-3, :]
-    plot_sim_score_loss_corr(sim_score, loss_score, save_path=sim_loss_corr_save_path)
+    if dynamic:
+        sim_score_path = "logs/sim_scores_%s_knots_%s_dynamic.npy" % (model, n_pieces)
+        sim_loss_corr_save_path = "vis/correlation/sim_loss_corr_%s_%s_dynamic.png" % (model, n_pieces)
+    else:
+        sim_score_path = "logs/sim_scores_%s_knots_%s.npy" % (model, n_pieces)
+        sim_loss_corr_save_path = "vis/correlation/sim_loss_corr_%s_%s.png" % (model, n_pieces)
+    loss_path = "logs/losses_%s.npy" % model
+
+    sim_score, loss_score = load_sim_score_loss_corr(sim_score_path, loss_path)
+    # plot_sim_score_loss_corr(sim_score, loss_score, save_path=sim_loss_corr_save_path)
+    # sim_score[7] = sim_score[6]
+    # loss_score[7] = loss_score[6]
+    plot_sim_score_loss_corr_combined(sim_score, loss_score, save_path=sim_loss_corr_save_path)
