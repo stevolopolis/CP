@@ -17,6 +17,54 @@ import math
 
 import urllib3
 
+###########################
+# Toy signal generators
+###########################
+def generate_fourier_signal(sample, n):
+    coefficients = []
+    phase = []
+    freqs = []
+    signal = torch.zeros_like(sample).to("cuda")
+    print("generating signal...")
+    for i in range(1, n+1):
+        coeff = random.gauss(0.0, 1.0)
+        freq = 2 * math.pi * i
+        signal += random.gauss(0.0, 1.0) * torch.sin(freq * sample) / n
+        coefficients.append(coeff)
+        freqs.append(freq)
+
+    return signal, coefficients, freqs
+
+
+def generate_piecewise_signal(sample, n, seed=42):
+    torch.manual_seed(seed)
+    signal = torch.zeros_like(sample).to("cuda")
+    print("generating signal...")
+    knots = (torch.rand(n+1) * len(sample)).int()
+    knots[0] = 0
+    knots[-1] = len(sample)-1
+    knots = torch.sort(knots)[0]
+    slopes = torch.randn(n)
+    init_y = torch.randn(1)
+    b = []
+    for i in range(n+1):
+        if i == 0:
+            signal[:knots[i]] = init_y
+        elif i == n-1:
+            signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]]) + signal[knots[i-1]-1]
+            b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
+        elif i == 1:
+            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + init_y.to('cuda')
+            b.append(init_y)
+        else:
+            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + signal[knots[i-1]-1]
+            b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
+
+    return signal, knots, slopes, torch.tensor(b)
+
+###########################
+# Toy signal generators END
+###########################
 
 class ImageFile(Dataset):
     def __init__(self, filename, coord_mode='1', url=None, grayscale=False):
