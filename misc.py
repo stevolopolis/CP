@@ -1,12 +1,121 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+import os
+import json
 
-def plot_signal_with_ema(sample, signal, ema, peaks=None, analytical_segments=None, save_path=None):
-    # Plot signal with ema
-    plt.plot(sample.cpu().numpy(), signal.cpu().numpy(), label='signal', linewidth=1, color='b')
-    plt.plot(sample.cpu().numpy(), ema, label='ema', linewidth=1, color='orange')
-    plt.legend(loc='upper right')
+from collections import namedtuple
+
+
+# ========================
+# Directory management functions
+# ========================
+
+def create_subdirectories(directory_path, is_file=False):
+    """
+    Create directories for each subdirectory that doesn't exist.
+
+    Args:
+    directory_path (str): The directory path.
+
+    Returns:
+    None
+    """
+    # Split the directory path into individual directory names
+    directories = directory_path.split(os.path.sep)
+    if is_file:
+        directories = directories[:-1]
+
+    # Initialize a variable to keep track of the current directory being created
+    current_directory = ''
+
+    # Iterate through each directory in the path
+    for directory in directories:
+        # Append the current directory to the path
+        current_directory = os.path.join(current_directory, directory)
+        
+        # Check if the current directory exists
+        if not os.path.exists(current_directory):
+            # If it doesn't exist, create the directory
+            os.makedirs(current_directory)
+
+
+
+# ========================
+# Data processing functions
+# ========================
+
+def save_score(score, path):
+    """Save the score to a file."""
+    with open(path, "w") as f:
+        f.write(str(float(score)))
+    print("score saved at %s" % path)
+
+
+def load_score(path):
+    """Load the score from a file."""
+    with open(path, "r") as f:
+        score = float(f.read())
+    return score
+
+
+def save_data(x, y, path):
+    """Save the data to a file."""
+    np.save(path, np.array([x, y]))
+    print("data saved at %s" % path)
+
+
+def load_data(path):
+    """Load the data from a file."""
+    data = np.load(path)
+    return data[0], data[1]
+    
+
+def save_configs(configs, path):
+    """Save the configs to a file."""
+    j = json.dumps(configs.NET._asdict())
+    with open(path, "w") as f:
+        json.dump(j, f)
+    print("configs saved at %s" % path)
+
+
+def convert(json):
+    """Convert a json object to a namedtuple."""
+    for key, value in json.items():
+        if isinstance(value, dict):
+            json[key] = convert(value)
+
+    return namedtuple('NET', json.keys())(**json)
+
+def load_configs(path):
+    """Load the configs from a file and store as a namedtuple."""
+    Config = namedtuple("config", ["NET"])
+
+    with open(path, "r") as f:
+        j = json.load(f)
+        
+    return Config(convert(json.loads(j)))
+
+
+# ========================
+# Plotting functions
+# ========================
+
+def plot_signal(sample, signal, label, color='b', save_path=None):
+    """Plot the signal."""
+    # Plot signal
+    plt.plot(sample.cpu().numpy(), signal.cpu().numpy(), label=label, color=color)
+    
+    if save_path is not None:
+        plt.legend(loc='upper right')
+        plt.savefig(save_path)
+        print("Saved to %s" % save_path)
+        plt.close()
+
+
+def plot_analytical(sample, peaks=None, analytical_segments=None, save_path=None):
+    """Plot the analytical segments."""
+    sample = sample.cpu().numpy()
 
     if peaks is not None:
         for peak in peaks:
@@ -17,97 +126,33 @@ def plot_signal_with_ema(sample, signal, ema, peaks=None, analytical_segments=No
         knots = knots.cpu().numpy().astype(np.int32)
 
         for i in range(len(slopes)):
-            plt.plot(sample[knots[i]:knots[i+1]].cpu().numpy(), slopes[i] * sample[knots[i]:knots[i+1]].cpu().numpy() + b[i], label='segment %s' % i, linewidth=1, color='g')
+            if i == 0:
+                plt.plot(sample[knots[i]:knots[i+1]], slopes[i] * sample[knots[i]:knots[i+1]] + b[i], label='analytical', linewidth=1, color='g')
+            else:
+                plt.plot(sample[knots[i]:knots[i+1]], slopes[i] * sample[knots[i]:knots[i+1]] + b[i], linewidth=1, color='g')
 
-    plt.savefig(save_path)
-    print("Saved to %s" % save_path)
-    plt.close()
+
+    if save_path is not None:
+        plt.legend(loc='upper right')
+        plt.savefig(save_path)
+        print("Saved to %s" % save_path)
+        plt.close()
 
 
-def exponential_moving_average(data, window):
+def plot_with_points(points, save_path=None):
     """
-    Calculate the exponential moving average of a given list.
-
-    Parameters:
-    data (list): The input data.
-    window (int): The size of the window for the moving average.
-
-    Returns:
-    list: Exponential moving average of the input data.
-    """
-    alpha = 2 / (window + 1)
-    ema = [data[0]]
-    for i in range(1, len(data)):
-        ema.append(alpha * data[i] + (1 - alpha) * ema[-1])
-    return ema
-
-
-def find_turning_points(ema):
-    """
-    Find the turning points in a given list representing the exponential moving average.
-
-    Parameters:
-    ema (list): Exponential moving average of a given list.
-
-    Returns:
-    list: Indices of turning points.
-    """
-    turning_points = []
-    for i in range(1, len(ema) - 1):
-        if ema[i] > ema[i - 1] and ema[i] > ema[i + 1]:
-            turning_points.append(i)
-        elif ema[i] < ema[i - 1] and ema[i] < ema[i + 1]:
-            turning_points.append(i)
-
-    degree = []
-    for j in range(len(turning_points)):
-        if j == 0:
-            degree.append(turning_points[j+1])
-        elif j == len(turning_points)-1:
-            degree.append(len(ema) - turning_points[j-1])
-        else:
-            degree.append(turning_points[j+1] - turning_points[j-1])
-
-    return turning_points, degree
-
-
-def convert_data_point_to_piece_idx(data_points, knot_idx):
-    piece_idx = []
-    knot_counter = 0
+    Plot a polyline with points.
+    """    
+    # Extract the x and y coordinates of the points
+    x, y = zip(*points)
     
-    for data_point in data_points:
-        while not (data_point >= knot_idx[knot_counter] and data_point < knot_idx[knot_counter+1]):
-            if knot_counter == len(knot_idx)-2:
-                break
-            knot_counter += 1
-
-        piece_idx.append(knot_counter)
-
-    if len(piece_idx) < len(data_points):
-        raise ValueError("Some data points are not within the range of the knots")
-        
-    return piece_idx
-
-
-# def coeff2diner(sample, coeff, freqs):
-#     coord = torch.tensor([coord for coord in range(len(sample))])
-#     coord_perm = torch.zeros_like(coord)
-#     for i, freq in enumerate(freqs):
-#         period = abs(2*math.pi/freq)
-#         n_coord_per_period = int((period / (torch.max(sample)-torch.min(sample))) * len(sample))
-#         n = 0
-#         for j in tqdm(range(n_coord_per_period)):
-#             idx = torch.tensor([id for id in range(j, len(sample), n_coord_per_period)])
-#             coord_perm[n : n+len(idx)] = coord[idx]
-#             n += len(idx)
+    # Plot the polyline
+    plt.plot(x, y, label='ramer_douglas_peucker', linewidth=1, color='red')
     
-#     return coord_perm
+    # Display the plot
+    if save_path is not None:
+        plt.legend(loc='upper right')
+        plt.savefig(save_path)
+        print("Saved to %s" % save_path)
+        plt.close()
 
-
-# def permute_signal(signal, coord_perm):
-#     signal_perm = signal[coord_perm]
-
-#     fig, ax = plt.subplots()
-#     signal_plot = ax.plot(sample.cpu().numpy(), signal.cpu().numpy(), label='signal', linewidth=1, color='b')
-#     #signal_perm_plot = ax.plot(sample.cpu().numpy(), signal_perm.detach().cpu().numpy(), label='perm_signal', linewidth=1, color='orange')
-#     plt.show()

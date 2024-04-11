@@ -1,12 +1,78 @@
-from argparse import ArgumentParser
 import numpy as np
 from PIL import Image
+from tqdm import tqdm
 import torch
+import matplotlib.pyplot as plt
 
 import wandb
 import random
 
-from main_image import get_data
+from misc import *
+from data import generate_piecewise_signal
+
+
+def visualize_model_1d_prediction(model, x, y, save_path="ngp_pred.png"):
+    """Generic model prediction."""
+    # get the original prediction of the model
+    preds = model(x)
+    
+    # visualize the target signal and the prediction
+    plt.plot(x.detach().cpu().numpy(), y.detach().cpu().numpy(), label="target")
+    plt.plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction")
+    plt.legend()
+    plt.savefig(save_path)
+    plt.close()
+
+
+def visualizattion_1d(model, x, one_to_one=True, save_path="visualization.png"):
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+    preds = model(x)
+    ax[0].plot(x.detach().cpu().numpy(), y.detach().cpu().numpy(), label="target")
+    ax[0].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction")
+    ax[0].legend()
+    ax[0].set_title("Model prediction & Target signal")
+
+    if one_to_one:
+        # fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        # # visualize the hash function
+        # hash_vals = model.hash_table(x)
+        # hash_vals = hash_vals.detach().cpu().numpy()
+        # ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals")
+        # ax[1].legend()
+        # # visualize the mlp function
+        # min_hash = np.min(hash_vals)
+        # max_hash = np.max(hash_vals)
+        # samples = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
+        # mlp_vals = model.net(samples)
+        # mlp_vals = mlp_vals.detach().cpu().numpy()
+        # ax[0].plot(samples.cpu().numpy(), mlp_vals, label="mlp_vals")
+        # ax[0].legend()
+
+        # visualize the hash function
+        hash_vals = model.hash_table(x)
+        hash_vals = hash_vals.detach().cpu().numpy()
+        ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals", color='b')
+        ax[1].legend()
+        ax[1].set_xlabel("MLP domain")
+        ax[1].set_ylabel("Hash/Input domain")
+        
+        # visualize the mlp function
+        min_hash = np.min(hash_vals)
+        max_hash = np.max(hash_vals)
+        samples = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
+        mlp_vals = model.net(samples)
+        mlp_vals = mlp_vals.detach().cpu().numpy()
+        ax2 = ax[1].twinx()
+        ax2.plot(samples.cpu().numpy(), mlp_vals, label="mlp_vals", color='orange')
+        ax2.set_ylabel("MLP range")
+        
+        plt.title("Hash and MLP function visualization")
+        plt.legend()
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        raise NotImplementedError("Only one-to-one hash function is supported for now.")
 
 
 def visualize_model_prediction(trainer, x, y, data_shape, log):
@@ -76,65 +142,36 @@ def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
 
 
 MEGAPIXELS = ["pluto", "tokyo", "mars"]
-IMG_ID = 20
+DATA_ID = 0
+MODEL = "ngp"
 
+MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
+MODEL_WEIGHTS_PATH = "%s/%s_%s.pth" % (MODEL_PATH, MODEL, DATA_ID)
+MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
+MODEL_HASH_PATH = "%s/visualization.png" % MODEL_PATH
 
 random.seed(1001)
 
 
-def main():
-    # Parse arguments
-    parser = ArgumentParser()
-    parser.add_argument("config_file")
-    parser.add_argument("model")
-    parser.add_argument("saved_model_path")
-    common_arg = parser.parse_args()
-    
-    # Import model specific packages
-    if common_arg.model == "diner":
-        # Diner experiment package
-        import diner_experiments.utils as MODE
-    elif common_arg.model == "ngp":
-        # NGP experiment package
-        import ngp_experiments.utils as MODE
-
-    # load model specific config file    
-    args = MODE.load_config(common_arg.config_file)
-
-    # make dataset and loader
-    dataset, data_idx = get_data(args.dataset, args.batch_size, idx=IMG_ID, coord_mode=args.coord_mode)
-    data_shape = dataset.get_data_shape()
-    print(data_shape)
-
-    # make trainer
-    trainer = MODE.Trainer(dataset, data_shape, args)
-    # load model
-    trainer.load_model(common_arg.saved_model_path)
-    print("Model parameters: ", trainer.get_model_size())
-
-    # init wanbd report for visualizing the experiment results
-    wandb.init(project=args.wandb_project,
-               entity=args.wandb_entity,
-               group="hash_visualization",
-               name="%s_visuals" % common_arg.model
-               )
-
-    # understand what the highest resolution hashing is contributing to the reconstruction
-    x, y = next(iter(dataset))
-
-    # Train on diner hash
-    #hashing_trainer = MODE.HashTrainer(dataset, trainer.model, data_shape, args)
-    #hashing_trainer.train()
-    # Visualization set
-    log = {}
-    visualize_model_prediction(trainer, x, y, data_shape, log)
-    #visualize_hash_function(trainer, data_shape, log, model=common_arg.model)
-    visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log)
-    wandb.log(log)
-
-    # visualizing the r-slice of the MLP space
-
-
 if __name__ == "__main__":
-    main()
+    for DATA_ID in tqdm(range(10, 11)):
+        MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
+        MODEL_WEIGHTS_PATH = "%s/%s_%s.pth" % (MODEL_PATH, MODEL, DATA_ID)
+        MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
+        MODEL_HASH_PATH = "%s/visualization.png" % MODEL_PATH
+
+        # Load model configs
+        x, y = load_data("%s/data_%s.npy" % (MODEL_PATH, DATA_ID))
+        x = torch.tensor(x).to("cuda").unsqueeze(1)
+        y = torch.tensor(y).to("cuda").unsqueeze(1)
+        configs = load_configs("%s/configs.json" % MODEL_PATH)
+
+        
+        model, optim, scheduler, configs = load_default_models(MODEL, configs=configs)
+
+        # load model
+        model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH))
+
+        # visualize model prediction
+        visualizattion_1d(model, x, one_to_one=True, save_path=MODEL_HASH_PATH)
     

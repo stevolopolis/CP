@@ -1,7 +1,25 @@
 import torch
 
 
-def get_weighted_preds(slopes, b, knots):
+def convert_data_point_to_piece_idx(data_points, knot_idx):
+    piece_idx = []
+    knot_counter = 0
+    
+    for data_point in data_points:
+        while not (data_point >= knot_idx[knot_counter] and data_point < knot_idx[knot_counter+1]):
+            if knot_counter == len(knot_idx)-2:
+                break
+            knot_counter += 1
+
+        piece_idx.append(knot_counter)
+
+    if len(piece_idx) < len(data_points):
+        raise ValueError("Some data points are not within the range of the knots")
+        
+    return piece_idx
+
+
+def get_analytical_preds(slopes, b, knots):
     weights = [knots[i+1] - knots[i] for i in range(len(knots)-1)]
     sq_weights = [knots[i+1]**2 - knots[i]**2 for i in range(len(knots)-1)]
     cube_weights = [knots[i+1]**3 - knots[i]**3 for i in range(len(knots)-1)]
@@ -27,7 +45,7 @@ def get_weighted_preds(slopes, b, knots):
     return pred_slopes, pred_b
 
 
-def weighted_var(slopes, b, pred_slopes, pred_b, knots):
+def analytical_loss(slopes, b, pred_slopes, pred_b, knots):
     weights = [abs(knots[i+1] - knots[i]) for i in range(len(knots)-1)]
     sq_weights = [abs(knots[i+1]**2 - knots[i]**2) for i in range(len(knots)-1)]
     cube_weights = [abs(knots[i+1]**3 - knots[i]**3) for i in range(len(knots)-1)]
@@ -54,17 +72,17 @@ def signal_similarity_score(slopes, b, knots, n_pieces):
     ranges = []
     for i in range(n_pieces):
         if i == n_pieces-1:
-            pred_h, pred_b = get_weighted_preds(slopes[i*knots_per_pieces:], b[i*knots_per_pieces:], knots[i*knots_per_pieces:])
-            score.append(weighted_var(slopes[i*knots_per_pieces:],
+            pred_h, pred_b = get_analytical_preds(slopes[i*knots_per_pieces:], b[i*knots_per_pieces:], knots[i*knots_per_pieces:])
+            score.append(analytical_loss(slopes[i*knots_per_pieces:],
                                       b[i*knots_per_pieces:],
                                       pred_h, pred_b,
                                       knots[i*knots_per_pieces:]))
             ranges.append(knots[-1] - knots[i*knots_per_pieces])
         else:
-            pred_h, pred_b = get_weighted_preds(slopes[i*knots_per_pieces:(i+1)*knots_per_pieces],
+            pred_h, pred_b = get_analytical_preds(slopes[i*knots_per_pieces:(i+1)*knots_per_pieces],
                                                  b[i*knots_per_pieces:(i+1)*knots_per_pieces],
                                                  knots[i*knots_per_pieces:(i+1)*knots_per_pieces+1])
-            score.append(weighted_var(slopes[i*knots_per_pieces:(i+1)*knots_per_pieces],
+            score.append(analytical_loss(slopes[i*knots_per_pieces:(i+1)*knots_per_pieces],
                                       b[i*knots_per_pieces:(i+1)*knots_per_pieces],
                                       pred_h, pred_b,
                                       knots[i*knots_per_pieces:(i+1)*knots_per_pieces+1]))
@@ -78,28 +96,37 @@ def signal_similarity_score(slopes, b, knots, n_pieces):
     return mean_score.item()
 
 
-def signal_similarity_score_with_turning_points(slopes, b, knots, turning_points):
+def signal_similarity_score_with_turning_points(slopes, b, knots, turning_points, pred_hs=None, pred_bs=None):
     score = []
     ranges = []
 
-    pred_hs = []
-    pred_bs = []
+    new_pred_hs = []
+    new_pred_bs = []
     
     for i in range(len(turning_points)-1):
         if i == len(turning_points)-1:
-            pred_h, pred_b = get_weighted_preds(slopes[turning_points[i]:], b[turning_points[i]:], knots[turning_points[i]:])
-            score.append(weighted_var(slopes[turning_points[i]:],
+            if pred_hs is None or pred_bs is None:
+                pred_h, pred_b = get_analytical_preds(slopes[turning_points[i]:], b[turning_points[i]:], knots[turning_points[i]:])
+            else:
+                pred_h = pred_hs[i]
+                pred_b = pred_bs[i]
+            score.append(analytical_loss(slopes[turning_points[i]:],
                                       b[turning_points[i]:],
                                       pred_h, pred_b,
                                       knots[turning_points[i]:]))
             ranges.append(knots[-1] - knots[turning_points[i]])
         else:
-            pred_h, pred_b = get_weighted_preds(slopes[turning_points[i]:turning_points[i+1]],
+            if pred_hs is None or pred_bs is None:
+                pred_h, pred_b = get_analytical_preds(slopes[turning_points[i]:turning_points[i+1]],
                                                  b[turning_points[i]:turning_points[i+1]],
                                                  knots[turning_points[i]:turning_points[i+1]+1])
-            pred_hs.append(pred_h.item())
-            pred_bs.append(pred_b.item())
-            score.append(weighted_var(slopes[turning_points[i]:turning_points[i+1]],
+            else:
+                pred_h = pred_hs[i]
+                pred_b = pred_bs[i]
+
+            new_pred_hs.append(pred_h.cpu())
+            new_pred_bs.append(pred_b.cpu())
+            score.append(analytical_loss(slopes[turning_points[i]:turning_points[i+1]],
                                       b[turning_points[i]:turning_points[i+1]],
                                       pred_h, pred_b,
                                       knots[turning_points[i]:turning_points[i+1]+1]))
@@ -110,4 +137,23 @@ def signal_similarity_score_with_turning_points(slopes, b, knots, turning_points
 
     mean_score = score_tensor @ ranges / ranges.sum()
 
-    return mean_score.item(), pred_hs, pred_bs
+    return mean_score.item(), new_pred_hs, new_pred_bs
+
+
+def get_hb_from_turning_points(turning_points: torch.tensor):
+    """
+    Get h and b from turning points.
+
+    turning_points.shape = (n_turning_points, 2)
+    """
+    pred_hs = []
+    pred_bs = []
+    
+    for i in range(len(turning_points)-1):
+        # get slope of line segments of two points
+        h = (turning_points[i+1, 1] - turning_points[i, 1]) / (turning_points[i+1, 0] - turning_points[i, 0])
+        b = turning_points[i, 1] - h * turning_points[i, 0]
+        pred_hs.append(h)
+        pred_bs.append(b)
+
+    return torch.tensor(pred_hs), torch.tensor(pred_bs)
