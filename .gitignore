@@ -1,5 +1,13 @@
 __pycache__
 results
-data
-sdf-net
-wandb
+vis
+ngp_experiments
+logs
+diner_experiments
+configs
+background
+
+*.out
+*.log
+*.sh
+*.png
