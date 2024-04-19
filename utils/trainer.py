@@ -6,9 +6,9 @@ from models import *
 from utils import *
 
 
-def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None):    
+def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None, device="cuda"):    
     # Load model
-    model, optim, scheduler, configs = load_default_models(model_type, epoch=epoch)
+    model, optim, scheduler, configs = load_default_models(model_type, epoch=epoch, device=device)
     print("Number of parameters:")
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 

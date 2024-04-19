@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import random
+import math
 from tqdm import tqdm
 
 from utils import *
@@ -24,7 +25,7 @@ n_trials = 5
 n_samples = 50000
 n = 1000
 epoch = 25000
-device = "cuda:0"
+device = "cuda:2"
 
 # Animation parameters
 nframes = 30
@@ -43,13 +44,12 @@ def train(trial, n_seeds):
 
     # Generate signal
     segmented_n_pieces = [random.randint(1, n_max_pieces) for _ in range(n_segs)]
-    signal, _, _, _ = generate_piecewise_signal(sample, segmented_n_pieces, seed=trial)
+    signal, _, _, _ = generate_piecewise_signal(sample, segmented_n_pieces, seed=trial, device=device)
 
     # Save data & configs
     save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{empirical_save_path}/data.npy")
     save_vals(segmented_n_pieces, f"{empirical_save_path}/n_pieces.txt")
     
-    model_losses = []
     for seed in range(n_seeds):
         # Generate specific hash vals
         mid_hashes = [round(0.1 * i, 1) for i in range(1, 10)]
@@ -60,8 +60,9 @@ def train(trial, n_seeds):
             new_hash_vals = torch.cat((new_hash_vals1, new_hash_vals2), dim=0)
 
             # Model training
-            model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes, hash_vals=new_hash_vals)
-            model_losses.append(model_loss)
+            model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes, hash_vals=new_hash_vals, device=device)
+            # Save model loss
+            save_vals([model_loss], f"{empirical_save_path}/loss_{mid_hash}_{seed}.txt")
             # Animate model predictions
             animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/preds_{mid_hash}_{seed}.mp4")
             # Save model weights
@@ -70,11 +71,9 @@ def train(trial, n_seeds):
 
     # Save model configs
     save_configs(configs, f"{empirical_save_path}/configs.json")
-    # Save model loss
-    save_vals(model_losses, f"{empirical_save_path}/loss_{mid_hash}.txt")
 
 
-def plot(trial):
+def plot(trial, n_seeds):
     """Plot loss against segment ratio.
     Loss should be lowest at the segment ratio equal to n_pieces ratio"""
     figure_save_path = f"vis/{experiment_name}/figures/{trial}"
@@ -86,13 +85,20 @@ def plot(trial):
     mid_hashes = [round(0.1 * i, 1) for i in range(1, 10)]
     # Load losses
     losses = []
+    losses_err = []
     for mid_hash in mid_hashes:
-        loss = load_vals(f"vis/{experiment_name}/empirical/{trial}/loss_{mid_hash}.txt")[0]
+        temp_loss = []
+        for seed in range(n_seeds):
+            temp_loss.append(load_vals(f"vis/{experiment_name}/empirical/{trial}/loss_{mid_hash}_{seed}.txt")[0])
+        loss = sum(temp_loss) / n_seeds
+        err = np.std(temp_loss)
         losses.append(loss)
+        losses_err.append(err)
 
     # Plot
     n_pieces_ratio = n_pieces[0] / sum(n_pieces)
     plt.plot(mid_hashes, losses, label='Loss')
+    plt.errorbar(mid_hashes, losses, yerr=losses_err, fmt='o')
     plt.axvline(n_pieces_ratio, color='red', label='n_pieces ratio')
     plt.xlabel("Bash segment ratio")
     plt.title("Loss against segment ratio")
@@ -101,5 +107,6 @@ def plot(trial):
     plt.close()
 
 if __name__ == "__main__":
-    train(10, 3)
-    # plot(1)
+    for trial in range(1, 5):
+        train(trial, 3)
+        plot(trial, 3)

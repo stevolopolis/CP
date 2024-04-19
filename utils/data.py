@@ -20,11 +20,11 @@ import urllib3
 ###########################
 # Toy signal generators
 ###########################
-def generate_fourier_signal(sample, n):
+def generate_fourier_signal(sample, n, device="cuda"):
     coefficients = []
     phase = []
     freqs = []
-    signal = torch.zeros_like(sample).to("cuda")
+    signal = torch.zeros_like(sample).to(device)
     print("generating signal...")
     for i in range(1, n+1):
         coeff = random.gauss(0.0, 1.0)
@@ -36,10 +36,10 @@ def generate_fourier_signal(sample, n):
     return signal, coefficients, freqs
 
 
-def generate_piecewise_signal(sample, n, seed=42):
+def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
     """Generates a piecewise signal with n pieces."""
     torch.manual_seed(seed)
-    signal = torch.zeros_like(sample).to("cuda")
+    signal = torch.zeros_like(sample).to(device)
     print("generating signal...")
     if isinstance(n, list):
         n_segs = len(n)
@@ -53,9 +53,9 @@ def generate_piecewise_signal(sample, n, seed=42):
         n_pieces = n
     knots[0] = 0
     knots[-1] = len(sample)-1
-    knots = torch.sort(knots)[0]
-    slopes = torch.randn(n_pieces)
-    init_y = torch.randn(1)
+    knots = torch.sort(knots)[0].to(device)
+    slopes = torch.randn(n_pieces).to(device)
+    init_y = torch.randn(1).to(device)
     b = []
     for i in range(n_pieces+1):
         if i == 0:
@@ -64,7 +64,7 @@ def generate_piecewise_signal(sample, n, seed=42):
             signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]]) + signal[knots[i-1]-1]
             b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
         elif i == 1:
-            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + init_y.to('cuda')
+            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + init_y.to(device)
             b.append(init_y)
         else:
             signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + signal[knots[i-1]-1]
