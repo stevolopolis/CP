@@ -7,7 +7,7 @@ if parent_dir not in sys.path:
 
 import wandb
 
-from utils import get_data, set_seeds, setup_wandb
+from utils import *
 
 MEGAPIXELS = ["pluto", "tokyo", "mars"]
 

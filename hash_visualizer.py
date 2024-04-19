@@ -8,8 +8,7 @@ import wandb
 import random
 
 from misc import *
-from data import generate_piecewise_signal
-
+from models.model_loader import load_default_models
 
 def visualize_model_1d_prediction(model, x, y, save_path="ngp_pred.png"):
     """Generic model prediction."""
@@ -24,7 +23,7 @@ def visualize_model_1d_prediction(model, x, y, save_path="ngp_pred.png"):
     plt.close()
 
 
-def visualizattion_1d(model, x, one_to_one=True, save_path="visualization.png"):
+def visualization_1d(model, x, one_to_one=True, save_path="visualization.png"):
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 
     preds = model(x)
@@ -73,6 +72,53 @@ def visualizattion_1d(model, x, one_to_one=True, save_path="visualization.png"):
         plt.close()
     else:
         raise NotImplementedError("Only one-to-one hash function is supported for now.")
+
+
+def visualization_hash_and_turning(model, x, turning="noturning", save_path="visualization.png"):
+    fig, ax = plt.subplots(2, 1, figsize=(4, 8))
+
+    # visualize the hash function
+    hash_vals = model.hash_table(x)
+    hash_vals = hash_vals.detach().cpu().numpy()
+    min_hash = np.min(hash_vals)
+    max_hash = np.max(hash_vals)
+
+    if turning == "noturning":
+        new_hash_vals = torch.linspace(min_hash, max_hash, len(x)).unsqueeze(1).to(x.device)
+    elif turning == "scale":
+        mid_hash = (max_hash - min_hash) * 0.8 + min_hash
+        new_hash_vals1 = torch.linspace(min_hash, mid_hash, len(x) // 2).unsqueeze(1).to(x.device)
+        new_hash_vals2 = torch.linspace(mid_hash, max_hash, len(x) // 2).unsqueeze(1).to(x.device)
+        new_hash_vals = torch.cat((new_hash_vals1, new_hash_vals2), dim=0)
+    elif turning == "flip":
+        new_hash_vals1 = torch.linspace(min_hash, max_hash, len(x) // 2).unsqueeze(1).to(x.device)
+        new_hash_vals2 = torch.linspace(max_hash, min_hash, len(x) // 2).unsqueeze(1).to(x.device)
+        new_hash_vals = torch.cat((new_hash_vals1, new_hash_vals2), dim=0)
+    else:
+        raise NotImplementedError("Only no turning, scale, and flip are supported for now.")
+    
+    preds = model.net(new_hash_vals)
+
+    ax[0].plot(x.detach().cpu().numpy(), new_hash_vals.detach().cpu().numpy(), label="hash_vals", color='b')
+    ax[0].set_xlabel("Input domain")
+    ax[0].set_ylabel("MLP domain")
+    ax[0].set_title("Hash function")
+    ax[0].legend(loc='upper left')
+
+    # visualize the mlp function
+    if turning == "scale":
+        mid_point = len(x) // 2
+        mid_y = model.net(new_hash_vals[mid_point]).item()
+        ax[1].scatter((0.5), (mid_y), s=100, color='r', alpha=0.5, label="New turning point")
+    ax[1].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction", color='orange')
+    ax[1].set_xlabel("Input domain")
+    ax[1].set_title("Model prediction")
+    ax[1].legend(loc='upper left')
+
+    plt.tight_layout()
+    plt.legend(loc='upper left')
+    plt.savefig(save_path)
+    plt.close()
 
 
 def visualize_model_prediction(trainer, x, y, data_shape, log):
@@ -154,14 +200,15 @@ random.seed(1001)
 
 
 if __name__ == "__main__":
-    for DATA_ID in tqdm(range(10, 11)):
+    for DATA_ID in tqdm(range(13, 14)):
         MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
-        MODEL_WEIGHTS_PATH = "%s/%s_%s.pth" % (MODEL_PATH, MODEL, DATA_ID)
+        MODEL_WEIGHTS_PATH = "%s/weights.pth" % (MODEL_PATH)
         MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
         MODEL_HASH_PATH = "%s/visualization.png" % MODEL_PATH
+        EXP_VIS_PATH = "vis/experiments"
 
         # Load model configs
-        x, y = load_data("%s/data_%s.npy" % (MODEL_PATH, DATA_ID))
+        x, y = load_data("%s/data.npy" % (MODEL_PATH))
         x = torch.tensor(x).to("cuda").unsqueeze(1)
         y = torch.tensor(y).to("cuda").unsqueeze(1)
         configs = load_configs("%s/configs.json" % MODEL_PATH)
@@ -173,5 +220,8 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH))
 
         # visualize model prediction
-        visualizattion_1d(model, x, one_to_one=True, save_path=MODEL_HASH_PATH)
+        visualization_1d(model, x, one_to_one=True, save_path=MODEL_HASH_PATH)
+
+        for turning in ["noturning", "scale", "flip"]:  
+            visualization_hash_and_turning(model, x, turning=turning, save_path=f"{EXP_VIS_PATH}/hash_turning_{DATA_ID}_{turning}.png")
     
