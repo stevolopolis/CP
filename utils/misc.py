@@ -45,18 +45,19 @@ def create_subdirectories(directory_path, is_file=False):
 # Data processing functions
 # ========================
 
-def save_score(score, path):
-    """Save the score to a file."""
+def save_vals(vals, path):
+    """Save a list of vals to file."""
     with open(path, "w") as f:
-        f.write(str(float(score)))
-    print("score saved at %s" % path)
+        for val in vals:
+            f.write(str(val) + "\n")
+    print("vals saved at %s" % path)
 
 
-def load_score(path):
-    """Load the score from a file."""
+def load_vals(path):
+    """Load a list of vals from a file."""
     with open(path, "r") as f:
-        score = float(f.read())
-    return score
+        vals = f.readlines()
+    return [float(val) for val in vals]
 
 
 def save_data(x, y, path):

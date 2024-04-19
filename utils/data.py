@@ -37,20 +37,30 @@ def generate_fourier_signal(sample, n):
 
 
 def generate_piecewise_signal(sample, n, seed=42):
+    """Generates a piecewise signal with n pieces."""
     torch.manual_seed(seed)
     signal = torch.zeros_like(sample).to("cuda")
     print("generating signal...")
-    knots = (torch.rand(n+1) * len(sample)).int()
+    if isinstance(n, list):
+        n_segs = len(n)
+        samples_per_seg = len(sample) // n_segs
+        knots = (torch.rand(n[0]+1) * len(sample) // n_segs).int()
+        for i, sub_n in enumerate(n[1:], 1):
+            knots = torch.cat((knots, (torch.rand(sub_n+1) * samples_per_seg + (samples_per_seg * i)).int()), dim=0)
+        n_pieces = sum(n)
+    else:
+        knots = (torch.rand(n+1) * len(sample)).int()
+        n_pieces = n
     knots[0] = 0
     knots[-1] = len(sample)-1
     knots = torch.sort(knots)[0]
-    slopes = torch.randn(n)
+    slopes = torch.randn(n_pieces)
     init_y = torch.randn(1)
     b = []
-    for i in range(n+1):
+    for i in range(n_pieces+1):
         if i == 0:
             signal[:knots[i]] = init_y
-        elif i == n-1:
+        elif i == n_pieces-1:
             signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]]) + signal[knots[i-1]-1]
             b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
         elif i == 1:
@@ -61,6 +71,32 @@ def generate_piecewise_signal(sample, n, seed=42):
             b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
 
     return signal, knots, slopes, torch.tensor(b)
+
+
+def generate_piecewise_segmented_signal(samples, ns, seed=42):
+    """Generates a piecewise signal len(samples) consecutive regions, each with n[i] pieces."""
+    new_samples = None
+    new_signals = None
+    new_knots = None
+    new_slopes = None
+    new_bs = None
+    for i, (sample, n) in enumerate(zip(samples, ns)):
+        signal, knot, slope, b = generate_piecewise_signal(sample, n, seed=seed)
+        if i == 0:
+            new_samples = sample
+            new_signals = signal
+            new_knots = knot
+            new_slopes = slope
+            new_bs = b
+        else:
+            new_samples = torch.cat((new_samples, sample))
+            new_signals = torch.cat((new_signals, signal))
+            new_knots = torch.cat((new_knots, knot))
+            new_slopes = torch.cat((new_slopes, slope))
+            new_bs = torch.cat((new_bs, b))
+
+    return new_samples, new_signals, new_knots, new_slopes, new_bs
+
 
 ###########################
 # Toy signal generators END

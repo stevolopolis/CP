@@ -7,7 +7,7 @@ import numpy as np
 import wandb
 from pathlib import Path
 
-from data import ImageFile, PointCloud, BigImageFile, CIFAR10, CameraDataset, WaveFile
+from utils.data import ImageFile, PointCloud, BigImageFile, CIFAR10, CameraDataset, WaveFile
 
 
 BASE_PATH = "./data"

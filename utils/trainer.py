@@ -3,10 +3,10 @@ import matplotlib.animation as animation
 from tqdm import tqdm
 
 from models import *
-from misc import *
+from utils import *
 
 
-def trainer(model_type, sample, signal, epoch, nframes):    
+def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None):    
     # Load model
     model, optim, scheduler, configs = load_default_models(model_type, epoch=epoch)
     print("Number of parameters:")
@@ -24,8 +24,12 @@ def trainer(model_type, sample, signal, epoch, nframes):
 
     print("training model...")
     # Train model
-    for i in range(epoch):
-        model_prediction = model(sample.unsqueeze(1)).squeeze(1)
+    for i in tqdm(range(epoch)):
+        # If hash_vals is provided, use it as input and skip the hash table
+        if hash_vals is not None:
+            model_prediction = model.net(hash_vals).squeeze(1)
+        else:
+            model_prediction = model(sample.unsqueeze(1)).squeeze(1)
         loss = ((model_prediction - signal)**2).mean()
 
         optim.zero_grad()
@@ -71,6 +75,6 @@ def animate_model_preds(sample, signal, model_pred_history, nframes, empirical_s
     ani = animation.FuncAnimation(fig=fig, func=update, frames=nframes, interval=500)
     plt.show()
     writervideo = animation.FFMpegWriter(fps=2)
-    ani.save(f"{empirical_save_path}/predictions.mp4", writer=writervideo)
-    print(f"animation saved at {empirical_save_path}/predictions.mp4")
+    ani.save(f"{empirical_save_path}", writer=writervideo)
+    print(f"animation saved at {empirical_save_path}")
     plt.close()

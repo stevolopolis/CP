@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr   
 
-from misc import *
+from utils import *
 
 def plot_analytical_score_loss_corr_combined(analytical_score, loss_score, save_path=None):
     """Scatter plot of similarity score vs loss score"""
@@ -134,12 +134,12 @@ if __name__ == '__main__':
         analytical_save_path = "vis/toy_signal/analytical/%s" % trial
         empirical_save_path = "vis/toy_signal/empirical/%s" % trial
 
-        model_loss = load_val(f"{empirical_save_path}/loss.txt")
+        model_loss = load_vals(f"{empirical_save_path}/loss.txt")[0]
         loss.append(model_loss)
 
         rdp_score_ls = []
         for n_pieces in n_pieces_ls:
-            rdp_score = load_val(f"{analytical_save_path}/rdp{n_pieces}_score.txt")
+            rdp_score = load_vals(f"{analytical_save_path}/rdp{n_pieces}_score.txt")[0]
 
             if rdp_score == -1 or model_loss == -1:
                 continue

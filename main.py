@@ -54,8 +54,8 @@ for trial in range(0, 25):
     rdp_b, rdp_anal_b = rdp_bs
     print(f"RDP similarity score: {rdp_score}")
     print(f"RDP analytical similarity score: {rdp_anal_score}")
-    save_score(rdp_score, f"{analytical_save_path}/rdp{n_pieces}_score.txt")
-    save_score(rdp_anal_score, f"{analytical_save_path}/rdpAnal{n_pieces}_score.txt")
+    save_vals([rdp_score], f"{analytical_save_path}/rdp{n_pieces}_score.txt")
+    save_vals([rdp_anal_score], f"{analytical_save_path}/rdpAnal{n_pieces}_score.txt")
 
     # Calculate similarity score with EMA-based turning points
     # ema_score, ema_h, ema_b, ema = ema_scorer(sample, signal, n_samples, slopes, b, knot_idx, n_pieces, ema_window=ema_window, return_points=True)
@@ -75,11 +75,11 @@ for trial in range(0, 25):
         model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes)
         
         # Animate model predictions
-        animate_model_preds(sample, signal, model_preds, nframes, empirical_save_path)
+        animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/predictions.mp4")
         # Save model configs
         save_configs(configs, f"{model_path}/configs.json")
         # Save model loss
-        save_score(model_loss, f"{empirical_save_path}/loss.txt")
+        save_vals([model_loss], f"{empirical_save_path}/loss.txt")
         # Save model weights
         torch.save(model.state_dict(), f"{model_path}/weights.pth")
         print(f"model weights saved at {model_path}/weights.pth")

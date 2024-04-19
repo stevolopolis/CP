@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import wandb
 import random
 
-from misc import *
+from utils import *
 from models.model_loader import load_default_models
 
 def visualize_model_1d_prediction(model, x, y, save_path="ngp_pred.png"):
