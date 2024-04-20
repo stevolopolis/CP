@@ -32,13 +32,11 @@ max_bandwidth = 100
 nframes = 30
 
 
-def train(trial, n_seeds):
+def train(base_path, trial, n_seeds):
     print("generating samples...")
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to("cuda")
 
-    analytical_save_path = f"vis/{experiment_name}/{MODEL}/analytical/{trial}"
-    empirical_save_path = f"vis/{experiment_name}/{MODEL}/empirical/{trial}"
-    create_subdirectories(analytical_save_path)
+    empirical_save_path = f"{base_path}/{trial}"
     create_subdirectories(empirical_save_path)
 
     # Generate full bandwidth signal
@@ -66,34 +64,7 @@ def train(trial, n_seeds):
             print(f"model weights saved at {empirical_save_path}/weights_{bandwidth}_{seed}.pth")
 
 
-def detect_flipping(vals: torch.tensor):
-    """Detect the number of domain flipping incurred by the hash function of the model."""
-    vals_diff = vals[1:] - vals[:-1]
-    flips = torch.logical_xor((vals_diff[1:] < 0), (vals_diff[:-1] < 0))
-    return flips.sum().item()
-
-
-def plot_scatter(y, x, xlabel, ylabel, title, save_path):
-    plt.scatter(x, y)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.savefig(save_path)
-    plt.close()
-    print(f"Scatter plot saved at {save_path}")
-    
-
-
-if __name__ == "__main__":
-    # for trial in range(n_trials):
-    #     train(trial, n_seeds=n_seeds)
-
-    # Plot
-    BASE_PATH = f"vis/bandwidth/{MODEL}"
-    EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
-    FIGURE_PATH = f"{BASE_PATH}/figures"
-    create_subdirectories(FIGURE_PATH)
-
+def plot(empirical_path, figure_path):
     hash_flips_total = []
     mlp_flips_total = []
     pred_flips_total = []
@@ -107,13 +78,13 @@ if __name__ == "__main__":
         signal_flips_trial = []
         bandwidths_trial = []
         losses_trial = []
-        config_path = f"{EMPIRICAL_PATH}/{trial}/configs.json"
+        config_path = f"{empirical_path}/{trial}/configs.json"
         for bandwidth in range(max_bandwidth, 1, -10):
-            data_path = f"{EMPIRICAL_PATH}/{trial}/data_{bandwidth}.npy"
+            data_path = f"{empirical_path}/{trial}/data_{bandwidth}.npy"
             for seed in range(n_seeds):
-                model_path = f"{EMPIRICAL_PATH}/{trial}/weights_{bandwidth}_{seed}.pth"
-                loss_path = f"{EMPIRICAL_PATH}/{trial}/loss_{bandwidth}_{seed}.txt"
-                hash_val_save_path = f"{FIGURE_PATH}/{trial}/visualization_{bandwidth}_{seed}.png"
+                model_path = f"{empirical_path}/{trial}/weights_{bandwidth}_{seed}.pth"
+                loss_path = f"{empirical_path}/{trial}/loss_{bandwidth}_{seed}.txt"
+                hash_val_save_path = f"{figure_path}/{trial}/visualization_{bandwidth}_{seed}.png"
                 create_subdirectories(hash_val_save_path, is_file=True)
 
                 # load trained_model
@@ -144,31 +115,31 @@ if __name__ == "__main__":
                     "Bandwidth",
                     "Hash Flips",
                     "Hash Flips vs Bandwidth",
-                    f"{FIGURE_PATH}/hash_flips_vs_bandwidth_{trial}.png")
+                    f"{figure_path}/hash_flips_vs_bandwidth_{trial}.png")
         plot_scatter(mlp_flips_trial,
                     bandwidths_trial,
                     "Bandwidth",
                     "MLP Flips",
                     "MLP Flips vs Bandwidth",
-                    f"{FIGURE_PATH}/mlp_flips_vs_bandwidth_{trial}.png")
+                    f"{figure_path}/mlp_flips_vs_bandwidth_{trial}.png")
         plot_scatter(pred_flips_trial,
                     bandwidths_trial,
                     "Bandwidth",
                     "Pred Flips",
                     "Pred Flips vs Bandwidth",
-                    f"{FIGURE_PATH}/pred_flips_vs_bandwidth_{trial}.png")
+                    f"{figure_path}/pred_flips_vs_bandwidth_{trial}.png")
         plot_scatter(signal_flips_trial,
                     bandwidths_trial,
                     "Bandwidth",
                     "Signal Flips",
                     "Signal Flips vs Bandwidth",
-                    f"{FIGURE_PATH}/signal_flips_vs_bandwidth_{trial}.png")
+                    f"{figure_path}/signal_flips_vs_bandwidth_{trial}.png")
         plot_scatter(losses_trial,
                     bandwidths_trial,
                     "Bandwidth",
                     "Loss",
                     "Loss vs Bandwidth",
-                    f"{FIGURE_PATH}/loss_vs_bandwidth_{trial}.png")
+                    f"{figure_path}/loss_vs_bandwidth_{trial}.png")
 
         hash_flips_total += hash_flips_trial
         mlp_flips_total += mlp_flips_trial
@@ -182,28 +153,63 @@ if __name__ == "__main__":
                 "Bandwidth",
                 "Hash Flips",
                 "Hash Flips vs Bandwidth",
-                f"{FIGURE_PATH}/hash_flips_vs_bandwidth.png")
+                f"{figure_path}/hash_flips_vs_bandwidth.png")
     plot_scatter(mlp_flips_total,
                 bandwidths_total,
                 "Bandwidth",
                 "MLP Flips",
                 "MLP Flips vs Bandwidth",
-                f"{FIGURE_PATH}/mlp_flips_vs_bandwidth.png")
+                f"{figure_path}/mlp_flips_vs_bandwidth.png")
     plot_scatter(pred_flips_total,
                 bandwidths_total,
                 "Bandwidth",
                 "Pred Flips",
                 "Pred Flips vs Bandwidth",
-                f"{FIGURE_PATH}/pred_flips_vs_bandwidth.png")
+                f"{figure_path}/pred_flips_vs_bandwidth.png")
     plot_scatter(signal_flips_total,
                 bandwidths_total,
                 "Bandwidth",
                 "Signal Flips",
                 "Signal Flips vs Bandwidth",
-                f"{FIGURE_PATH}/signal_flips_vs_bandwidth.png")
+                f"{figure_path}/signal_flips_vs_bandwidth.png")
     plot_scatter(losses_total,
                 bandwidths_total,
                 "Bandwidth",
                 "Loss",
                 "Loss vs Bandwidth",
-                f"{FIGURE_PATH}/loss_vs_bandwidth.png")
+                f"{figure_path}/loss_vs_bandwidth.png")
+
+
+def detect_flipping(vals: torch.tensor):
+    """Detect the number of domain flipping incurred by the hash function of the model."""
+    vals_diff = vals[1:] - vals[:-1]
+    flips = torch.logical_xor((vals_diff[1:] < 0), (vals_diff[:-1] < 0))
+    return flips.sum().item()
+
+
+def plot_scatter(y, x, xlabel, ylabel, title, save_path):
+    plt.scatter(x, y)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Scatter plot saved at {save_path}")
+    
+
+
+if __name__ == "__main__":
+    BASE_PATH = f"vis/bandwidth/{MODEL}_ordered"
+    EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
+    FIGURE_PATH = f"{BASE_PATH}/figures"
+    create_subdirectories(EMPIRICAL_PATH)
+    create_subdirectories(FIGURE_PATH)
+
+    # train
+    for trial in range(n_trials):
+        train(EMPIRICAL_PATH, trial, n_seeds=n_seeds)
+
+    # Plot
+    plot(EMPIRICAL_PATH, FIGURE_PATH)
+
+    
