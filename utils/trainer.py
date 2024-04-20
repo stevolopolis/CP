@@ -78,3 +78,18 @@ def animate_model_preds(sample, signal, model_pred_history, nframes, empirical_s
     ani.save(f"{empirical_save_path}", writer=writervideo)
     print(f"animation saved at {empirical_save_path}")
     plt.close()
+
+
+def animate_model_preds_2d(model_pred_history, nframes, empirical_save_path):
+    """Convert 2D model predictions to a video."""
+    fig, ax = plt.subplots()
+    ims = []
+    for i in range(nframes):
+        im = ax.imshow(model_pred_history[i], animated=True)
+        ims.append([im])
+
+    ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True, repeat_delay=1000)
+    ani.save(f"{empirical_save_path}", writer="imagemagick")
+    print(f"animation saved at {empirical_save_path}")
+    plt.close()
+

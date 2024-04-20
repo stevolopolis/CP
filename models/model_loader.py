@@ -41,6 +41,18 @@ def load_default_models(model_type, epoch=5000, configs=None, device="cuda"):
         model = NGP(dim_in, dim_out, 1, c).to(device)
         optim = torch.optim.Adam(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
+    elif model_type == "ngp_2d":
+        if configs is None:
+            Config = namedtuple("config", ["NET"])
+            NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
+            c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=2, log2_n_features=10, base_resolution=25, finest_resolution=25, num_layers=n_layers)
+            c = Config(NET=c_net)
+        else:
+            c = configs
+        model = NGP(2, 3, 1, c).to(device)
+        optim = torch.optim.Adam(model.parameters(), lr=0.01)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
+
     else:
         raise ValueError("Model type not recognized")
     
