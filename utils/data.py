@@ -53,7 +53,8 @@ def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
     knots[0] = 0
     knots[-1] = len(sample)-1
     knots = torch.sort(knots)[0].to(device)
-    slopes = torch.randn(n_pieces).to(device)
+    #slopes = torch.randn(n_pieces).to(device)
+    slopes = (torch.rand(n_pieces).to(device) - 0.5) * 4
     init_y = torch.randn(1).to(device)
     b = []
     for i in range(n_pieces+1):
