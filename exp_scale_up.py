@@ -107,6 +107,8 @@ def plot(trial, n_seeds):
     plt.close()
 
 if __name__ == "__main__":
+    plot(10, 3)
+    input()
     for trial in range(1, 5):
         train(trial, 3)
         plot(trial, 3)

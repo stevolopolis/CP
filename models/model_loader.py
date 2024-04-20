@@ -34,7 +34,7 @@ def load_default_models(model_type, epoch=5000, configs=None, device="cuda"):
         if configs is None:
             Config = namedtuple("config", ["NET"])
             NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
-            c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=1, log2_n_features=5, base_resolution=5, finest_resolution=5, num_layers=n_layers)
+            c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=1, log2_n_features=5, base_resolution=25, finest_resolution=25, num_layers=n_layers)
             c = Config(NET=c_net)
         else:
             c = configs

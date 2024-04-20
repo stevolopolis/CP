@@ -10,20 +10,18 @@ import random
 from utils import *
 from models.model_loader import load_default_models
 
-def visualize_model_1d_prediction(model, x, y, save_path="ngp_pred.png"):
-    """Generic model prediction."""
-    # get the original prediction of the model
-    preds = model(x)
-    
-    # visualize the target signal and the prediction
-    plt.plot(x.detach().cpu().numpy(), y.detach().cpu().numpy(), label="target")
-    plt.plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction")
-    plt.legend()
-    plt.savefig(save_path)
-    plt.close()
+
+def get_model_hash_net_output(model, x):
+    hash_vals = model.hash_table(x)
+    min_hash = torch.min(hash_vals)
+    max_hash = torch.max(hash_vals)
+    mlp_domain = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
+    mlp_vals = model.net(mlp_domain)
+
+    return hash_vals, mlp_vals, mlp_domain
 
 
-def visualization_1d(model, x, one_to_one=True, save_path="visualization.png"):
+def visualization_1d(model, x, y, one_to_one=True, save_path="visualization.png"):
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 
     preds = model(x)
@@ -33,23 +31,8 @@ def visualization_1d(model, x, one_to_one=True, save_path="visualization.png"):
     ax[0].set_title("Model prediction & Target signal")
 
     if one_to_one:
-        # fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-        # # visualize the hash function
-        # hash_vals = model.hash_table(x)
-        # hash_vals = hash_vals.detach().cpu().numpy()
-        # ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals")
-        # ax[1].legend()
-        # # visualize the mlp function
-        # min_hash = np.min(hash_vals)
-        # max_hash = np.max(hash_vals)
-        # samples = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
-        # mlp_vals = model.net(samples)
-        # mlp_vals = mlp_vals.detach().cpu().numpy()
-        # ax[0].plot(samples.cpu().numpy(), mlp_vals, label="mlp_vals")
-        # ax[0].legend()
-
+        hash_vals, mlp_vals, mlp_domain = get_model_hash_net_output(model, x)
         # visualize the hash function
-        hash_vals = model.hash_table(x)
         hash_vals = hash_vals.detach().cpu().numpy()
         ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals", color='b')
         ax[1].legend()
@@ -57,13 +40,9 @@ def visualization_1d(model, x, one_to_one=True, save_path="visualization.png"):
         ax[1].set_ylabel("Hash/Input domain")
         
         # visualize the mlp function
-        min_hash = np.min(hash_vals)
-        max_hash = np.max(hash_vals)
-        samples = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
-        mlp_vals = model.net(samples)
         mlp_vals = mlp_vals.detach().cpu().numpy()
         ax2 = ax[1].twinx()
-        ax2.plot(samples.cpu().numpy(), mlp_vals, label="mlp_vals", color='orange')
+        ax2.plot(mlp_domain.cpu().numpy(), mlp_vals, label="mlp_vals", color='orange')
         ax2.set_ylabel("MLP range")
         
         plt.title("Hash and MLP function visualization")
@@ -121,41 +100,6 @@ def visualization_hash_and_turning(model, x, turning="noturning", save_path="vis
     plt.close()
 
 
-def visualize_model_prediction(trainer, x, y, data_shape, log):
-    """Generic model prediction."""
-    # get the original prediction of the model
-    preds = trainer.model(x.to(trainer.args.device))
-    loss = ((preds - y.to(trainer.args.device)) ** 2).mean()
-    psnr = -10*np.log10(loss.item())
-    # generate the reconstructed image
-    preds = preds.clamp(-1, 1).detach().cpu().numpy()
-    preds = preds.reshape(data_shape)
-    preds = preds / 2 + 0.5
-    im = Image.fromarray((preds*255).astype(np.uint8), mode='RGB')
-
-    log["psnr"] = psnr
-    log["recon"] = wandb.Image(im)
-
-
-def visualize_diner_hash_function(trainer, data_shape, log):
-    """
-    Visualize the hash map of DINER.
-    
-    Note that DINER hash values are 2D, while we visualize in 3D. 
-    We do so by padding the R channel with zeros.
-    """
-    # Visualizing the hash operation
-    hashed_input = trainer.model.table.data     # diner
-    hashed_input = hashed_input - torch.min(hashed_input, dim=0)[0]
-    hashed_input = hashed_input / torch.max(hashed_input, dim=0)[0]
-    zeros = torch.zeros((hashed_input.shape[0], 1)).to(trainer.args.device)
-    hashed_input = torch.cat((zeros, hashed_input), dim=1)
-    hashed_im = hashed_input.reshape(data_shape).detach().cpu().numpy()
-    hashed_im = Image.fromarray((hashed_im*255).astype(np.uint8), mode='RGB')
-
-    log["hashing"] = wandb.Image(hashed_im)
-
-
 def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
     """
     Visualize the effects of each level of NGP hashing.
@@ -187,6 +131,21 @@ def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
         log["recon_w/o_L%s+" % level] = wandb.Image(alt_im)
 
 
+def load_model_and_configs(data_path, config_path, model_path, model_type, device="cuda"):
+    x, y = load_data(data_path)
+    x = torch.tensor(x).to(device).unsqueeze(1)
+    y = torch.tensor(y).to(device).unsqueeze(1)
+    configs = load_configs(config_path)
+
+    model, optim, scheduler, configs = load_default_models(model_type, configs=configs, device=device)
+
+    # load model
+    model.load_state_dict(torch.load(model_path))
+
+    return model, x, y, configs
+
+
+
 MEGAPIXELS = ["pluto", "tokyo", "mars"]
 DATA_ID = 0
 MODEL = "ngp"
@@ -208,19 +167,10 @@ if __name__ == "__main__":
         EXP_VIS_PATH = "vis/experiments"
 
         # Load model configs
-        x, y = load_data("%s/data.npy" % (MODEL_PATH))
-        x = torch.tensor(x).to("cuda").unsqueeze(1)
-        y = torch.tensor(y).to("cuda").unsqueeze(1)
-        configs = load_configs("%s/configs.json" % MODEL_PATH)
-
-        
-        model, optim, scheduler, configs = load_default_models(MODEL, configs=configs)
-
-        # load model
-        model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH))
+        model, x, y, configs = load_model_and_configs(f"{MODEL_PATH}/data.npy", f"{MODEL_PATH}/configs.json", MODEL_WEIGHTS_PATH, MODEL)
 
         # visualize model prediction
-        visualization_1d(model, x, one_to_one=True, save_path=MODEL_HASH_PATH)
+        visualization_1d(model, x, y, one_to_one=True, save_path=MODEL_HASH_PATH)
 
         for turning in ["noturning", "scale", "flip"]:  
             visualization_hash_and_turning(model, x, turning=turning, save_path=f"{EXP_VIS_PATH}/hash_turning_{DATA_ID}_{turning}.png")

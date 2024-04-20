@@ -20,20 +20,19 @@ import urllib3
 ###########################
 # Toy signal generators
 ###########################
-def generate_fourier_signal(sample, n, device="cuda"):
-    coefficients = []
-    phase = []
-    freqs = []
+def generate_fourier_signal(sample, n, coeffs=None, phases=None, freqs=None, device="cuda"):
+    if coeffs is None:
+        coeffs = torch.randn(n)
+    if phases is None:
+        phases = torch.rand(n) * 2 * torch.pi
+    if freqs is None:
+        freqs = torch.linspace(1, n, n) * 2 * torch.pi
     signal = torch.zeros_like(sample).to(device)
     print("generating signal...")
-    for i in range(1, n+1):
-        coeff = random.gauss(0.0, 1.0)
-        freq = 2 * math.pi * i
-        signal += random.gauss(0.0, 1.0) * torch.sin(freq * sample) / n
-        coefficients.append(coeff)
-        freqs.append(freq)
+    for i in range(n):
+        signal += coeffs[i] * torch.sin(freqs[i] * sample + phases[i]) / n
 
-    return signal, coefficients, freqs
+    return signal, coeffs, freqs, phases
 
 
 def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
