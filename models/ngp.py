@@ -59,9 +59,14 @@ class HashEmbedder1D(nn.Module):
         # custom uniform initialization
         self.reset_parameters()
 
-    def reset_parameters(self):
-        for i in range(self.n_levels):
-            nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
+    def reset_parameters(self, ordered=False):
+        if ordered:
+            for i in range(self.n_levels):
+                n_weights = self.embeddings[i].weight.shape[0]
+                self.embeddings[i].weight.data = torch.linspace(-0.0001, 0.0001, n_weights).unsqueeze(1).float().to(self.embeddings[i].weight.device)
+        else:
+            for i in range(self.n_levels):
+                nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
 
     def linear_interp(self, x, grid_min_vertex, grid_max_vertex, grid_embedds):
         '''
@@ -283,9 +288,9 @@ class NGP(nn.Module):
 
         return output
 
-    def init_weights(self):
+    def init_weights(self, ordered=False):
         for layer in self.net:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
             
-        self.hash_table.reset_parameters()
+        self.hash_table.reset_parameters(ordered=ordered)

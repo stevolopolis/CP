@@ -13,7 +13,7 @@ def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None, device="
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
     # Initialize model weights
-    model.init_weights()
+    model.init_weights(ordered=True)
 
     # For storing model prediction history
     model_pred_history = []
