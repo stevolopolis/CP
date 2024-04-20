@@ -19,7 +19,7 @@ MODEL = 'ngp'
 # Training parameters
 n_samples = 50000
 n = 1000
-epoch = 25000
+epoch = 2500
 
 # Animation parameters
 nframes = 30
@@ -27,7 +27,7 @@ nframes = 30
 print("generating samples...")
 sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to("cuda")
 
-train_loops = False
+train_loops = True
 n_pieces = 50
 ema_window = n_samples // 10
 dynamic_pieces = True
@@ -72,7 +72,16 @@ for trial in range(0, 25):
     
 
     if train_loops:
-        model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes)
+        # Load default model configs
+        configs = get_default_model_configs(MODEL)
+        # Get model
+        model = get_model(MODEL, 1, 1, 1, configs)
+        # Initialize model weights
+        model.init_weights(ordered=False)
+        # Load default model optimizers and schedulers
+        optim, scheduler = get_default_model_opts(MODEL, model, epoch)
+        # Train model
+        model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes)
         
         # Animate model predictions
         animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/predictions.mp4")

@@ -6,20 +6,16 @@ from models import *
 from utils import *
 
 
-def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None, device="cuda"):    
+def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=None, device="cuda"):    
     # Load model
-    model, optim, scheduler, configs = load_default_models(model_type, epoch=epoch, device=device)
     print("Number of parameters:")
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-
-    # Initialize model weights
-    model.init_weights(ordered=True)
 
     # For storing model prediction history
     model_pred_history = []
 
     # Initial model prediction
-    model_prediction = model(sample.unsqueeze(1)).squeeze(1)
+    model_prediction = model(sample)
     model_pred_history.append(model_prediction.detach().cpu().numpy())
 
     print("training model...")
@@ -27,9 +23,9 @@ def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None, device="
     for i in tqdm(range(epoch)):
         # If hash_vals is provided, use it as input and skip the hash table
         if hash_vals is not None:
-            model_prediction = model.net(hash_vals).squeeze(1)
+            model_prediction = model.net(hash_vals)
         else:
-            model_prediction = model(sample.unsqueeze(1)).squeeze(1)
+            model_prediction = model(sample)
         loss = ((model_prediction - signal)**2).mean()
 
         optim.zero_grad()
@@ -43,7 +39,7 @@ def trainer(model_type, sample, signal, epoch, nframes, hash_vals=None, device="
     print("Training completed.")
     print("Model loss: %s" % loss.item())
 
-    return model, configs, loss.item(), model_pred_history
+    return loss.item(), model_pred_history
 
 
 def animate_model_preds(sample, signal, model_pred_history, nframes, empirical_save_path):
@@ -80,16 +76,19 @@ def animate_model_preds(sample, signal, model_pred_history, nframes, empirical_s
     plt.close()
 
 
-def animate_model_preds_2d(model_pred_history, nframes, empirical_save_path):
+def animate_model_preds_2d(model_pred_history, data_shape, nframes, empirical_save_path):
     """Convert 2D model predictions to a video."""
     fig, ax = plt.subplots()
     ims = []
     for i in range(nframes):
-        im = ax.imshow(model_pred_history[i], animated=True)
+        pred = model_pred_history[i]
+        pred = np.reshape(pred, data_shape)
+        im = ax.imshow(pred, animated=True)
         ims.append([im])
 
     ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True, repeat_delay=1000)
-    ani.save(f"{empirical_save_path}", writer="imagemagick")
+    writervideo = animation.FFMpegWriter(fps=5) 
+    ani.save(f"{empirical_save_path}", writer=writervideo)
     print(f"animation saved at {empirical_save_path}")
     plt.close()
 

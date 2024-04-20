@@ -11,49 +11,61 @@ hidden_dim = 64
 n_layers = 5
 dim_in = 1
 dim_out = 1
+img_size = ()
+
+
+def get_default_model_configs(model_type):
+    if model_type == 'relu':
+        Config = namedtuple("config", ["NET"])
+        NetworkConfig = namedtuple("NET", ["num_layers", "dim_hidden", "use_bias"])
+        c_net = NetworkConfig(num_layers=n_layers, dim_hidden=hidden_dim, use_bias=True)
+        c = Config(NET=c_net)
+    elif model_type == 'linear':
+        c = None
+    elif model_type == "ngp":
+        Config = namedtuple("config", ["NET"])
+        NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
+        c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=1, log2_n_features=5, base_resolution=25, finest_resolution=25, num_layers=n_layers)
+        c = Config(NET=c_net)
+    elif model_type == "ngp_2d":
+        Config = namedtuple("config", ["NET"])
+        NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
+        c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=2, log2_n_features=14, base_resolution=50, finest_resolution=50, num_layers=n_layers)
+        c = Config(NET=c_net)
+    else:
+        raise ValueError("Model type not recognized")
+
+    return c
 
 
 # Load default models
-def load_default_models(model_type, epoch=5000, configs=None, device="cuda"):
+def get_default_model_opts(model_type, model, epoch=5000):
     if model_type == 'relu':
-        if configs is None:
-            Config = namedtuple("config", ["NET"])
-            NetworkConfig = namedtuple("NET", ["num_layers", "dim_hidden", "use_bias"])
-            c_net = NetworkConfig(num_layers=n_layers, dim_hidden=hidden_dim, use_bias=True)
-            c = Config(NET=c_net)
-        else:
-            c = configs
-        model = MLP(dim_in, dim_out, c).to(device)
         optim = torch.optim.Adam(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
     elif model_type == 'linear':
-        model = LinearModel().to(device)
         optim = torch.optim.Adam(model.parameters(), lr=0.05)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-2)
     elif model_type == "ngp":
-        if configs is None:
-            Config = namedtuple("config", ["NET"])
-            NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
-            c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=1, log2_n_features=5, base_resolution=25, finest_resolution=25, num_layers=n_layers)
-            c = Config(NET=c_net)
-        else:
-            c = configs
-        model = NGP(dim_in, dim_out, 1, c).to(device)
         optim = torch.optim.Adam(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
     elif model_type == "ngp_2d":
-        if configs is None:
-            Config = namedtuple("config", ["NET"])
-            NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
-            c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=2, log2_n_features=10, base_resolution=25, finest_resolution=25, num_layers=n_layers)
-            c = Config(NET=c_net)
-        else:
-            c = configs
-        model = NGP(2, 3, 1, c).to(device)
         optim = torch.optim.Adam(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
-
     else:
         raise ValueError("Model type not recognized")
     
-    return model, optim, scheduler, c
+    return optim, scheduler
+
+
+def get_model(model_type, dim_in, dim_out, data_size, configs, device="cuda"):
+    if model_type == 'relu':
+        model = MLP(dim_in, dim_out, hidden_dim, configs).to(device)
+    elif model_type == 'linear':
+        model = LinearModel().to(device)
+    elif model_type in ["ngp", "ngp_2d"]:
+        model = NGP(dim_in, dim_out, data_size, configs).to(device)
+    else:
+        raise ValueError("Model type not recognized")
+
+    return model

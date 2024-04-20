@@ -59,8 +59,16 @@ def train(trial, n_seeds):
             new_hash_vals2 = torch.linspace(mid_hash, max_hash, n_samples // 2).unsqueeze(1).to(device)
             new_hash_vals = torch.cat((new_hash_vals1, new_hash_vals2), dim=0)
 
-            # Model training
-            model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes, hash_vals=new_hash_vals, device=device)
+            # Load default model configs
+            configs = get_default_model_configs(MODEL)
+            # Get model
+            model = get_model(MODEL, 1, 1, 1, configs, device=device)
+            # Initialize model weights
+            model.init_weights(ordered=False)
+            # Load default model optimizers and schedulers
+            optim, scheduler = get_default_model_opts(MODEL, model, epoch)
+            # Train model
+            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes, hash_vals=new_hash_vals, device=device)
             # Save model loss
             save_vals([model_loss], f"{empirical_save_path}/loss_{mid_hash}_{seed}.txt")
             # Animate model predictions
@@ -107,8 +115,6 @@ def plot(trial, n_seeds):
     plt.close()
 
 if __name__ == "__main__":
-    plot(10, 3)
-    input()
     for trial in range(1, 5):
         train(trial, 3)
         plot(trial, 3)
