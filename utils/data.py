@@ -103,7 +103,7 @@ def generate_piecewise_segmented_signal(samples, ns, seed=42):
 ###########################
 
 class ImageFile(Dataset):
-    def __init__(self, filename, coord_mode='1', url=None, grayscale=False):
+    def __init__(self, filename, coord_mode=2, url=None, grayscale=False):
         super().__init__()
         Image.MAX_IMAGE_PIXELS = 1000000000
         file_exists = os.path.isfile(filename)

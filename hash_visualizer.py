@@ -8,7 +8,7 @@ import wandb
 import random
 
 from utils import *
-from models.model_loader import load_default_models
+from models import *
 
 
 def get_model_hash_net_output(model, x):
