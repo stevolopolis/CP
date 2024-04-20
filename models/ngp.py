@@ -82,7 +82,7 @@ class HashEmbedder1D(nn.Module):
         return c
 
     def forward(self, x):
-        # x is 2D point position: B x 2
+        # x is 1D point position: B x 1
         x_embedded_all = []
         for i in range(self.n_levels):
             resolution = torch.floor(self.base_resolution * self.b**i)
@@ -172,9 +172,18 @@ class HashEmbedder(nn.Module):
         # custom uniform initialization
         self.reset_parameters()
 
-    def reset_parameters(self):
-        for i in range(self.n_levels):
-            nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
+    def reset_parameters(self, ordered=False):
+        if ordered:
+            for i in range(self.n_levels):
+                resolution = math.floor(self.base_resolution * self.b**i)
+                xw = torch.linspace(-0.0001, 0.0001, resolution)
+                yw = torch.linspace(-0.0001, 0.0001, resolution)
+                weight_grid = torch.stack(torch.meshgrid(xw, yw), dim=1).view(-1, 2).to(self.embeddings[i].weight.device)
+                self.embeddings[i].weight.data = weight_grid
+        else:
+            for i in range(self.n_levels):
+                nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
+
 
     def bilinear_interp(self, x, grid_min_vertex, grid_max_vertex, grid_embedds):
         '''
@@ -262,13 +271,20 @@ class NGP(nn.Module):
         self.dim_in = dim_in
         self.dim_out = dim_out
         dim_hidden = self.ngp_configs.dim_hidden
-        self.hash_table = HashEmbedder1D(data_size,
-                                       n_levels=self.ngp_configs.n_levels,
-                                       n_features_per_level=self.ngp_configs.feature_dim,
-                                       log2_hashmap_size=self.ngp_configs.log2_n_features,
-                                       base_resolution=self.ngp_configs.base_resolution,
-                                       finest_resolution=self.ngp_configs.finest_resolution)
-
+        if dim_in == 1:
+            self.hash_table = HashEmbedder1D(data_size,
+                                        n_levels=self.ngp_configs.n_levels,
+                                        n_features_per_level=self.ngp_configs.feature_dim,
+                                        log2_hashmap_size=self.ngp_configs.log2_n_features,
+                                        base_resolution=self.ngp_configs.base_resolution,
+                                        finest_resolution=self.ngp_configs.finest_resolution)
+        elif dim_in == 2:
+            self.hash_table = HashEmbedder(data_size,
+                                        n_levels=self.ngp_configs.n_levels,
+                                        n_features_per_level=self.ngp_configs.feature_dim,
+                                        log2_hashmap_size=self.ngp_configs.log2_n_features,
+                                        base_resolution=self.ngp_configs.base_resolution,
+                                        finest_resolution=self.ngp_configs.finest_resolution)
         # Hash Table Parameters
         in_features = self.ngp_configs.n_levels * self.ngp_configs.feature_dim
 
