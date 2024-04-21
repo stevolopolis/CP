@@ -59,15 +59,15 @@ def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
     b = []
     for i in range(n_pieces+1):
         if i == 0:
-            signal[:knots[i]] = init_y
-        elif i == n_pieces-1:
-            signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]]) + signal[knots[i-1]-1]
+            signal[0] = init_y
+        elif i == n_pieces:
+            signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]-1]) + signal[knots[i-1]-1]
             b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
         elif i == 1:
-            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + init_y.to(device)
+            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[:knots[i]] - sample[0]) + init_y.to(device)
             b.append(init_y)
         else:
-            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + signal[knots[i-1]-1]
+            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]-1]) + signal[knots[i-1]-1]
             b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
 
     return signal, knots, slopes, torch.tensor(b)
