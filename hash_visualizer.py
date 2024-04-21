@@ -142,7 +142,7 @@ def load_model_and_configs(data_path, config_path, model_path, model_type, devic
     # Get model
     model = get_model(model_type, 1, 1, 1, configs, device=device)
     # load model
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model, x, y, configs
 
