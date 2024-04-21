@@ -34,9 +34,9 @@ bandwidth_decrement = 50
 nframes = 30
 
 
-def train(base_path, trial, n_seeds):
+def train(base_path, trial, n_seeds, device="cuda"):
     print("generating samples...")
-    sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to("cuda")
+    sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
 
     empirical_save_path = f"{base_path}/{trial}"
     create_subdirectories(empirical_save_path)
@@ -53,8 +53,16 @@ def train(base_path, trial, n_seeds):
 
         # Generate specific hash vals
         for seed in range(n_seeds):
+            # Load default model configs
+            configs = get_default_model_configs(MODEL)
+            # Get model
+            model = get_model(MODEL, 1, 1, 1, configs, device=device)
+            # Initialize model weights
+            model.init_weights(ordered=True)
+            # Load default model optimizers and schedulers
+            optim, scheduler = get_default_model_opts(MODEL, model, epoch)
             # Model training
-            model, configs, model_loss, model_preds = trainer(MODEL, sample, signal, epoch, nframes, device="cuda")
+            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes, device=device)
             
             # Animate model predictions
             animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/preds_{bandwidth}_{seed}.mp4")
