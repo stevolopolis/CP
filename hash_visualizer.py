@@ -137,8 +137,10 @@ def load_model_and_configs(data_path, config_path, model_path, model_type, devic
     y = torch.tensor(y).to(device).unsqueeze(1)
     configs = load_configs(config_path)
 
-    model, optim, scheduler, configs = load_default_models(model_type, configs=configs, device=device)
-
+    # Load default model configs
+    configs = get_default_model_configs(model_type)
+    # Get model
+    model = get_model(model_type, 1, 1, 1, configs, device=device)
     # load model
     model.load_state_dict(torch.load(model_path))
 

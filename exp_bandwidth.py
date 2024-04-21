@@ -19,22 +19,23 @@ experiment_name = "bandwidth"
 
 # Model parameters
 MODEL = 'ngp'
-MODEL_NAME = f"{MODEL}_piecewise"
+MODEL_NAME = f"{MODEL}"
 
 # Training parameters
 n_trials = 10
 n_seeds = 3
 n_samples = 50000
 n = 1000
-epoch = 25000
-max_bandwidth = 500
-bandwidth_decrement = 50
+epoch = 10000
+max_bandwidth = 100
+bandwidth_decrement = 10
 
 # Animation parameters
 nframes = 30
 
 
 def train(base_path, trial, n_seeds, device="cuda"):
+    torch.manual_seed(trial)
     print("generating samples...")
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
 
@@ -46,7 +47,7 @@ def train(base_path, trial, n_seeds, device="cuda"):
     for bandwidth in range(max_bandwidth, 1, -bandwidth_decrement):
         #coeffs[bandwidth:] = 0
         #signal, _, _, _ = generate_fourier_signal(sample, bandwidth, coeffs=coeffs, freqs=freqs, phases=phases)
-        signal, _, _, _ = generate_piecewise_signal(sample, bandwidth)
+        signal, _, _, _ = generate_piecewise_signal(sample, bandwidth, seed=trial)
 
         # Save data & configs
         save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{empirical_save_path}/data_{bandwidth}.npy")
@@ -75,7 +76,7 @@ def train(base_path, trial, n_seeds, device="cuda"):
             print(f"model weights saved at {empirical_save_path}/weights_{bandwidth}_{seed}.pth")
 
 
-def plot(empirical_path, figure_path, hashing=True):
+def plot(empirical_path, figure_path, hashing=True, device="cuda"):
     total = {"pred_flips": [], "pred_segs": [], "signal_flips": [], "signal_segs": [], "bandwidths": [], "losses": []}
     if hashing:
         total["hash_flips"] = []
@@ -99,15 +100,15 @@ def plot(empirical_path, figure_path, hashing=True):
 
                 # load trained_model
                 model, x, y, configs = load_model_and_configs(data_path, config_path, model_path, MODEL)
-                # plot hash vals
-                visualization_1d(model, x, y, one_to_one=True, save_path=hash_val_save_path)
                 # load loss
                 model_loss = load_vals(loss_path)[0]
                 if hashing:
+                    # plot hash vals
+                    visualization_1d(model, x, y, one_to_one=True, save_path=hash_val_save_path)
                     # get ngp model outputs
                     hash_vals, mlp_vals, mlp_domain = get_model_hash_net_output(model, x)
                     # get number of hash flips
-                    hash_flips, _ = detect_segments(model.hash_table.embeddings[0].weight)
+                    hash_flips, _ = detect_segments(model.hash_table.embeddings[0].weight, exact=True)
                     # get number of mlp flips
                     mlp_flips, mlp_segs = detect_segments(mlp_vals)
                     trial_dict["hash_flips"].append(hash_flips)
@@ -157,12 +158,13 @@ def plot(empirical_path, figure_path, hashing=True):
                     f"{figure_path}/{key}_vs_bandwidths.png")
 
 
-def detect_segments(vals: torch.tensor):
+def detect_segments(vals: torch.tensor, exact=False):
     """Detect the number of linear segments and change of directions in an array of values"""
     eps = 1e-6
 
     slopes = vals[1:] - vals[:-1]
-    slopes = smooth_signal(slopes)
+    if not exact:
+        slopes = smooth_signal(slopes)
     segs = torch.abs(slopes[1:] - slopes[:-1]) > eps
     flips = torch.logical_xor((slopes[1:] < 0), (slopes[:-1] < 0))
     
@@ -175,11 +177,8 @@ def detect_segments(vals: torch.tensor):
 def smooth_signal(vals):
     """Smooth a signal via a sliding window that assigns a new value with the mode of the window."""
     window_size = 10
-    smoothed_vals = torch.zeros_like(vals)
-    for i in range(len(vals)):
-        start = max(0, i - window_size)
-        end = min(len(vals), i + window_size)
-        smoothed_vals[i] = torch.mode(vals[start:end], dim=0).values
+    vals_unfolded = vals.unfold(0, window_size, 1)
+    smoothed_vals = torch.mode(vals_unfolded, dim=-1).values
 
     return smoothed_vals
 
@@ -202,7 +201,7 @@ if __name__ == "__main__":
     create_subdirectories(FIGURE_PATH)
 
     # train
-    #for trial in range(n_trials):
+    # for trial in range(n_trials):
     #    train(EMPIRICAL_PATH, trial, n_seeds=n_seeds)
 
     # Plot
