@@ -18,8 +18,10 @@ np.random.seed(21)
 experiment_name = "bandwidth"
 
 # Model parameters
+signal_type = "fourier"
 MODEL = 'ngp'
 MODEL_NAME = f"{MODEL}"
+# MODEL_NAME = f"{MODEL}_{signal_type}"
 
 # Training parameters
 n_trials = 10
@@ -27,14 +29,14 @@ n_seeds = 3
 n_samples = 50000
 n = 1000
 epoch = 10000
-max_bandwidth = 100
-bandwidth_decrement = 10
+max_bandwidth = 100 if signal_type == "fourier" else 500
+bandwidth_decrement = 10 if signal_type == "fourier" else 50
 
 # Animation parameters
 nframes = 30
 
 
-def train(base_path, trial, n_seeds, device="cuda"):
+def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
     torch.manual_seed(trial)
     print("generating samples...")
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
@@ -43,17 +45,26 @@ def train(base_path, trial, n_seeds, device="cuda"):
     create_subdirectories(empirical_save_path)
 
     # Generate full bandwidth signal
-    #full_band_signal, coeffs, freqs, phases = generate_fourier_signal(sample, max_bandwidth)
+    if signal_type == "fourier":
+        full_band_signal, coeffs, freqs, phases = generate_fourier_signal(sample, max_bandwidth)
+    elif signal_type == "piecewise":
+        full_band_signal, knot_idx, _, _ = generate_piecewise_signal(sample, max_bandwidth, seed=trial)
+    else:
+        raise ValueError("Signal type not recognized")
+    
     for bandwidth in range(max_bandwidth, 1, -bandwidth_decrement):
-        #coeffs[bandwidth:] = 0
-        #signal, _, _, _ = generate_fourier_signal(sample, bandwidth, coeffs=coeffs, freqs=freqs, phases=phases)
-        signal, _, _, _ = generate_piecewise_signal(sample, bandwidth, seed=trial)
+        if signal_type == "fourier":
+            signal = decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth)
+        elif signal_type == "piecewise":
+            signal = decrement_piecewise_signal(sample, full_band_signal, knot_idx, bandwidth)
+            # signal, _, _, _ = generate_piecewise_signal(sample, bandwidth, seed=trial)
 
         # Save data & configs
         save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{empirical_save_path}/data_{bandwidth}.npy")
 
         # Generate specific hash vals
         for seed in range(n_seeds):
+            torch.manual_seed(seed)
             # Load default model configs
             configs = get_default_model_configs(MODEL)
             # Get model
@@ -99,7 +110,7 @@ def plot(empirical_path, figure_path, hashing=True, device="cuda"):
                 create_subdirectories(hash_val_save_path, is_file=True)
 
                 # load trained_model
-                model, x, y, configs = load_model_and_configs(data_path, config_path, model_path, MODEL)
+                model, x, y, configs = load_model_and_configs(data_path, config_path, model_path, MODEL, device=device)
                 # load loss
                 model_loss = load_vals(loss_path)[0]
                 if hashing:
@@ -150,12 +161,23 @@ def plot(empirical_path, figure_path, hashing=True, device="cuda"):
     for key in total.keys():
         if key == "bandwidths":
             continue
-        plot_scatter(total["bandwidths"],
-                    total[key],
-                    "bandwidths",
-                    key,
-                    f"{key} vs bandwidths",
-                    f"{figure_path}/{key}_vs_bandwidths.png")
+        x, y, yerr = scatter_to_errbar(total["bandwidths"], total[key])
+        plot_errbar(x, y, yerr, "bandwidths", key, f"{key} vs bandwidths", f"{figure_path}/{key}_vs_bandwidths.png")
+        # plot_scatter(total["bandwidths"],
+        #             total[key],
+        #             "bandwidths",
+        #             key,
+        #             f"{key} vs bandwidths",
+        #             f"{figure_path}/{key}_vs_bandwidths.png")
+
+
+def scatter_to_errbar(x, y):
+    """Convert scatter plot data to error bar data"""
+    x_uniq = np.unique(x)
+    y_mean = [np.mean(y[x == i]) for i in x_uniq]
+    y_std = [np.std(y[x == i]) for i in x_uniq]
+
+    return x_uniq, y_mean, y_std
 
 
 def detect_segments(vals: torch.tensor, exact=False):
@@ -193,6 +215,16 @@ def plot_scatter(x, y, xlabel, ylabel, title, save_path):
     print(f"Scatter plot saved at {save_path}")
 
 
+def plot_errbar(x, y, yerr, xlabel, ylabel, title, save_path):
+    plt.errorbar(x, y, yerr=yerr, fmt='o', color='yellowgreen')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Plot saved at {save_path}")
+
+
 if __name__ == "__main__":
     BASE_PATH = f"vis/bandwidth/{MODEL_NAME}"
     EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
@@ -202,9 +234,9 @@ if __name__ == "__main__":
 
     # train
     # for trial in range(n_trials):
-    #    train(EMPIRICAL_PATH, trial, n_seeds=n_seeds)
+    #    train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type)
 
     # Plot
-    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp")
+    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device="cuda")
 
     

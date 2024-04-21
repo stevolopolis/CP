@@ -36,8 +36,7 @@ def ramer_douglas_peucker(points, n_segments):
         
         return max_point_idx, max_distance
 
-
-    if len(points) < n_segments+1:
+    if len(points) <= n_segments+1:
         return points
     
     weights = {}
@@ -66,7 +65,7 @@ def ramer_douglas_peucker(points, n_segments):
     simplified.insert(0, points[0])
     simplified.append(points[-1])
 
-    return torch.tensor(simplified)
+    return simplified
 
 
 def ramer_douglas_peucker_double_line(points1, points2, n_segments):
