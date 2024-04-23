@@ -1,82 +1,33 @@
-# Coordinate Permutation Is All You Need
+# A New Perspective To Understanding Multi-resolution Hash Grid Neural Fields
+
+> __ASMR - Activation-Sharing Multi-Resolution Coordinate Networks for Efficient Inference__  
+> [STS Luo](https://www.cs.toronto.edu/~stevenlts)
+> _UofT CSC494 Winter 2024 Project_  
+> __[Report](https://drive.google.com/file/d/1DtmzJPLqtytvwh5QF2XE_vQfQpVxN-Qe/view?usp=sharing)__
 
 ## Structure of the repo
-- `main_cp_explorer.py`: main() to train on 2D images
-- `hash_visualizer.py`: contains functions to visualize trained models (not maintained)
-- `data.py`: dataLoaders
-- `<model_type>_experiments`: 
-    - `models.py`: nn.modules
-    - `utils.py`: model specific trainer class 
-- `configs`:
-    - `<model_type>.ini`: model specific configurations
+This repo consists of all the code used to generate the figures in the report. Each figure is treated as an individual experiment and the corresponding code file contains both the training and plotting code.
 
-We use W&B to log training stats and visualizations. W&B configs are specified in the config .ini files, while W&B groupings are specified in the specific training files, such as `main_image.py`, where the W&B instance is initialized.
+Currently, there are four sets of experiments:
+- Domain manipulation visualizer (`hash_visualizer.py`)
+- Domain scaling and performance (`exp_scale_up.py`)
+- Domain flipping, prediction segments, and signal bandwith (`exp_bandwidth.py`)
+- Collision rates and performance (`exp_collision_error.py`) (not included in the report)
+- Visualizing how the MLP resolve hash collision via gradients (`exp_collision_gradient.py`) (not included in the report)
 
-```
-[WANDB]
-use_wandb: 1
-wandb_project: playground
-wandb_entity: utmist-parsimony
-```
-Do not change `wandb_entity`, this is our base W&B directory. If you are running a big cluster of experiments that is working towards your own dedicated research question, create a new W&B project by specifying a different string for `wandb_project`. For any small PoC experiments, feel free to just dump it into `wandb_project: playground` with your group name specified in `main_image.py` (or other equivalent trainer files).
+Each experiment code is structure as follow:
+- `train(path, trial, n_seeds, **)` 
+- `plot(model_path, figure_path, **)`
+- `if __name__ == "__main__"` block which defines and creates the directories, and iterates through the number of trials to call `train()` and `plot()`
 
-## Get started -- Data preparation
-All data are loaded using the function `get_data()` defined in `utils.py`. All data should be stored in a common directory. Change the global variable `BASE_PATH` in `main_image.py` to the common directory once setup.
 
-## Get started -- train a new model
-```python main_cp_explorer.py configs/<config.ini> <model_type>``` 
+## To reproduce the figures
+Simply run with a GPU the following code
+```python exp_<experiment_name>.py```
 
-Several things are logged during training:
-- PSNR/SSIM
-- Hash map
-- MLP space
 
-Trained models will be saved in the `results` folder.
-
-## Get started -- visualize a trained model
-```python hash_visualizer.py configs/<config.ini> <model_type> <vis_folder>```
-
-For DINER:
-- Visualize the hash values in RGB. That is, instead of using the RGB values of each pixel, we use (0, hash_x, hash_y) as the "color" of the image.
-
-For NGP:
-- We visualize the effects of each individual level of hashing by zeroing out all but one level of hash values when feeding into the MLP. The visualization is the output of the MLP given this augmented set of hash values. 
-
-## Status of the project
-**Done**
-- New framework of understanding: domain manipulation.
-    - applied to 1D signal and features and validated empirically
-    - somewhat easily generalizable to adding hashing
-
-**Lingering questions**
-- Function basis for translation domain ops to basis extensions
-- Explain clustering effect with domain manipulation framework
-- Extend to n-dimensional signals
-- Extend to n-dimensional features
-
-## Dump
-<details>
-<summary> Questions seeking answers (Legacy) </summary>
-
-- Coordinate permutation (CP) perspective in one resolution (observed; not proved yet)
-
-- How do we prove that NGP is doing CP instead of embedding learning? Or, is embedding learning = CP? We need a rigorous definition and explanation
-
-- CP when concatenated in multiple resolutions
-
-- CP on other hybrid methods
-
-- CP with or without hashing
-
-- CP in 3D or higher dimensions
-
-- CP param to expressivity trade-off (rigorous math)
-
-- Is hash embedding learning permuted coordinates or saving multi-resolution pixel values
-
-- Deformable NGP grid
-
-- CP as a constructive method of INRs
-
-- Can expand a whole topic here…
-</details>
+## Legacy code
+Attempted to develop a similarity score for signals that could determine how suitable a signal is for NGP to fit analytically. Related codes:
+- `main.py`
+- `sim_score_plot.py`
+- `scorers/`
