@@ -19,7 +19,7 @@ experiment_name = "bandwidth"
 
 # Model parameters
 signal_type = "fourier"
-MODEL = 'ngp'
+MODEL = 'relu'
 MODEL_NAME = f"{MODEL}"
 # MODEL_NAME = f"{MODEL}_{signal_type}"
 
@@ -173,6 +173,8 @@ def plot(empirical_path, figure_path, hashing=True, device="cuda"):
 
 def scatter_to_errbar(x, y):
     """Convert scatter plot data to error bar data"""
+    x = np.array(x).astype(int)
+    y = np.array(y)
     x_uniq = np.unique(x)
     y_mean = [np.mean(y[x == i]) for i in x_uniq]
     y_std = [np.std(y[x == i]) for i in x_uniq]
@@ -216,7 +218,7 @@ def plot_scatter(x, y, xlabel, ylabel, title, save_path):
 
 
 def plot_errbar(x, y, yerr, xlabel, ylabel, title, save_path):
-    plt.errorbar(x, y, yerr=yerr, fmt='o', color='yellowgreen')
+    plt.errorbar(x, y, yerr=yerr, fmt='o', color='salmon')
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
@@ -233,10 +235,10 @@ if __name__ == "__main__":
     create_subdirectories(FIGURE_PATH)
 
     # train
-    # for trial in range(n_trials):
-    #    train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type)
+    for trial in range(n_trials):
+       train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type, device="cuda:0")
 
     # Plot
-    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device="cuda")
+    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device="cuda:1")
 
     
