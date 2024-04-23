@@ -131,14 +131,23 @@ def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
         log["recon_w/o_L%s+" % level] = wandb.Image(alt_im)
 
 
-def load_model_and_configs(data_path, config_path, model_path, model_type, device="cuda"):
-    x, y = load_data(data_path)
-    x = torch.tensor(x).to(device).unsqueeze(1)
-    y = torch.tensor(y).to(device).unsqueeze(1)
-    configs = load_configs(config_path)
+def load_model_and_configs(data_path, config_path, model_path, model_type, data_size=1, device="cuda"):
+    x = None
+    y = None
+    configs = None
 
-    model, optim, scheduler, configs = load_default_models(model_type, configs=configs, device=device)
+    if data_path is not None:
+        x, y = load_data(data_path)
+        x = torch.tensor(x).to(device).unsqueeze(1)
+        y = torch.tensor(y).to(device).unsqueeze(1)
 
+    if config_path is not None:
+        configs = load_configs(config_path)
+
+    # Get model
+    model = get_model(model_type, 2, 3, data_size, configs, device=device)
+    # load model
+    model.load_state_dict(torch.load(model_path, map_location=device))  
     # load model
     model.load_state_dict(torch.load(model_path))
 
