@@ -13,8 +13,8 @@ from models import *
 
 def get_model_hash_net_output(model, x):
     hash_vals = model.hash_table(x)
-    min_hash = torch.min(hash_vals)
-    max_hash = torch.max(hash_vals)
+    min_hash = torch.min(hash_vals).item()
+    max_hash = torch.max(hash_vals).item()
     mlp_domain = torch.linspace(min_hash, max_hash, 1000).unsqueeze(1).to(x.device)
     mlp_vals = model.net(mlp_domain)
 

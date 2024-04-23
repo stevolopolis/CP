@@ -108,13 +108,13 @@ def plot(trial, n_seeds):
     plt.plot(mid_hashes, losses, label='Loss', color='salmon')
     plt.errorbar(mid_hashes, losses, yerr=losses_err, fmt='o', color='salmon')
     plt.axvline(n_pieces_ratio, color='cadetblue', label='n_pieces ratio')
-    plt.xlabel("Bash segment ratio")
+    plt.xlabel("Hash segment ratio")
     plt.title("Loss against segment ratio")
     plt.legend()
     plt.savefig(f"{figure_save_path}/loss_vs_segment_ratio.png")
     plt.close()
 
 if __name__ == "__main__":
-    for trial in range(1, 5):
-        # train(trial, 3)
+    for trial in range(1, 10):
+        train(trial, 3)
         plot(trial, 3)
