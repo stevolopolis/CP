@@ -18,9 +18,9 @@ np.random.seed(21)
 experiment_name = "bandwidth"
 
 # Model parameters
-signal_type = "fourier"
-MODEL = 'ngp'
-MODEL_NAME = f"{MODEL}"
+signal_type = "piecewise"
+MODEL = 'relu'
+MODEL_NAME = f"{MODEL}_piecewise"
 # MODEL_NAME = f"{MODEL}_{signal_type}"
 
 # Training parameters
@@ -70,7 +70,10 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
             # Get model
             model = get_model(MODEL, 1, 1, 1, configs, device=device)
             # Initialize model weights
-            model.init_weights(ordered=True)
+            if MODEL == "ngp":
+                model.init_weights(ordered=True)
+            else:
+                model.init_weights()
             # Load default model optimizers and schedulers
             optim, scheduler = get_default_model_opts(MODEL, model, epoch)
             # Model training
@@ -233,8 +236,8 @@ if __name__ == "__main__":
     create_subdirectories(FIGURE_PATH)
 
     # train
-    # for trial in range(n_trials):
-    #    train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type)
+    for trial in range(n_trials):
+       train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type)
 
     # Plot
     plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device="cuda")

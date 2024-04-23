@@ -25,8 +25,8 @@ def visualization_1d(model, x, y, one_to_one=True, save_path="visualization.png"
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
 
     preds = model(x)
-    ax[0].plot(x.detach().cpu().numpy(), y.detach().cpu().numpy(), label="target")
-    ax[0].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction")
+    ax[0].plot(x.detach().cpu().numpy(), y.detach().cpu().numpy(), label="target", color='royalblue')
+    ax[0].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction", color='orange')
     ax[0].legend()
     ax[0].set_title("Model prediction & Target signal")
 
@@ -34,7 +34,7 @@ def visualization_1d(model, x, y, one_to_one=True, save_path="visualization.png"
         hash_vals, mlp_vals, mlp_domain = get_model_hash_net_output(model, x)
         # visualize the hash function
         hash_vals = hash_vals.detach().cpu().numpy()
-        ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals", color='b')
+        ax[1].plot(hash_vals, x.detach().cpu().numpy(), label="hash_vals", color='cadetblue')
         ax[1].legend()
         ax[1].set_xlabel("MLP domain")
         ax[1].set_ylabel("Hash/Input domain")
@@ -42,8 +42,9 @@ def visualization_1d(model, x, y, one_to_one=True, save_path="visualization.png"
         # visualize the mlp function
         mlp_vals = mlp_vals.detach().cpu().numpy()
         ax2 = ax[1].twinx()
-        ax2.plot(mlp_domain.cpu().numpy(), mlp_vals, label="mlp_vals", color='orange')
+        ax2.plot(mlp_domain.cpu().numpy(), mlp_vals, label="mlp_vals", color='salmon')
         ax2.set_ylabel("MLP range")
+        ax2.legend()
         
         plt.title("Hash and MLP function visualization")
         plt.legend()
@@ -78,7 +79,7 @@ def visualization_hash_and_turning(model, x, turning="noturning", save_path="vis
     
     preds = model.net(new_hash_vals)
 
-    ax[0].plot(x.detach().cpu().numpy(), new_hash_vals.detach().cpu().numpy(), label="hash_vals", color='b')
+    ax[0].plot(x.detach().cpu().numpy(), new_hash_vals.detach().cpu().numpy(), label="hash_vals", color='cadetblue')
     ax[0].set_xlabel("Input domain")
     ax[0].set_ylabel("MLP domain")
     ax[0].set_title("Hash function")
@@ -89,7 +90,7 @@ def visualization_hash_and_turning(model, x, turning="noturning", save_path="vis
         mid_point = len(x) // 2
         mid_y = model.net(new_hash_vals[mid_point]).item()
         ax[1].scatter((0.5), (mid_y), s=100, color='r', alpha=0.5, label="New turning point")
-    ax[1].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction", color='orange')
+    ax[1].plot(x.detach().cpu().numpy(), preds.detach().cpu().numpy(), label="prediction", color='salmon')
     ax[1].set_xlabel("Input domain")
     ax[1].set_title("Model prediction")
     ax[1].legend(loc='upper left')
@@ -135,10 +136,13 @@ def load_model_and_configs(data_path, config_path, model_path, model_type, devic
     x, y = load_data(data_path)
     x = torch.tensor(x).to(device).unsqueeze(1)
     y = torch.tensor(y).to(device).unsqueeze(1)
-    configs = load_configs(config_path)
 
+    # Load model configs
+    if config_path is not None:
+        configs = load_configs(config_path)
     # Load default model configs
-    configs = get_default_model_configs(model_type)
+    else:
+        configs = get_default_model_configs(model_type)
     # Get model
     model = get_model(model_type, 1, 1, 1, configs, device=device)
     # load model
@@ -161,7 +165,7 @@ random.seed(1001)
 
 
 if __name__ == "__main__":
-    for DATA_ID in tqdm(range(13, 14)):
+    for DATA_ID in tqdm(range(0, 14)):
         MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
         MODEL_WEIGHTS_PATH = "%s/weights.pth" % (MODEL_PATH)
         MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
