@@ -40,7 +40,7 @@ class HashEmbedder1D(nn.Module):
         self.grid_offset = torch.tensor([[0], [1]])
 
         if n_levels == 1:
-            self.b = 1
+            self.b = 1.0
         else:
             self.b = torch.exp((torch.log(self.finest_resolution)-torch.log(self.base_resolution))/(n_levels-1))
 
@@ -81,7 +81,7 @@ class HashEmbedder1D(nn.Module):
 
         return c
 
-    def forward(self, x):
+    def forward(self, x, interp=True):
         # x is 1D point position: B x 1
         x_embedded_all = []
         for i in range(self.n_levels):
@@ -90,7 +90,10 @@ class HashEmbedder1D(nn.Module):
             #print(torch.min(hashed_grid_indices), torch.max(hashed_grid_indices))
             grid_embedds = self.embeddings[i](hashed_grid_indices)
             
-            x_embedded = self.linear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+            if interp:
+                x_embedded = self.linear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+            else:
+                x_embedded = grid_embedds
             x_embedded_all.append(x_embedded)
 
         return torch.cat(x_embedded_all, dim=-1)
@@ -131,6 +134,7 @@ class HashEmbedder1D(nn.Module):
         new_coords = coords[..., 0]
         return new_coords.type(torch.int)
 
+
 class HashEmbedder(nn.Module):
     """
     Reimplementation of the hash encoder from:
@@ -155,7 +159,10 @@ class HashEmbedder(nn.Module):
 
         self.grid_offset = torch.tensor([[i,j] for i in [0, 1] for j in [0, 1]])
 
-        self.b = torch.exp((torch.log(self.finest_resolution)-torch.log(self.base_resolution))/(n_levels-1))
+        if n_levels == 1:
+            self.b = 1.0
+        else:
+            self.b = torch.exp((torch.log(self.finest_resolution)-torch.log(self.base_resolution))/(n_levels-1))
 
         hash_list = []
         for i in range(n_levels):
@@ -167,8 +174,6 @@ class HashEmbedder(nn.Module):
             hash_list.append(embeddings)
 
         self.embeddings = nn.ModuleList(hash_list)
-        #self.embeddings = nn.ModuleList([nn.Embedding(2**self.log2_hashmap_size, \
-        #                                self.n_features_per_level) for i in range(n_levels)])
         # custom uniform initialization
         self.reset_parameters()
 
@@ -176,14 +181,17 @@ class HashEmbedder(nn.Module):
         if ordered:
             for i in range(self.n_levels):
                 resolution = math.floor(self.base_resolution * self.b**i)
-                xw = torch.linspace(-0.0001, 0.0001, resolution)
-                yw = torch.linspace(-0.0001, 0.0001, resolution)
+                if resolution**2 < self.hashmap_sizes:
+                    n_weights_per_axis = resolution+1
+                else:
+                    n_weights_per_axis = int(math.sqrt(self.hashmap_sizes))
+                xw = torch.linspace(-0.0001, 0.0001, n_weights_per_axis)
+                yw = torch.linspace(-0.0001, 0.0001, n_weights_per_axis)
                 weight_grid = torch.stack(torch.meshgrid(xw, yw), dim=1).view(-1, 2).to(self.embeddings[i].weight.device)
                 self.embeddings[i].weight.data = weight_grid
         else:
             for i in range(self.n_levels):
                 nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
-
 
     def bilinear_interp(self, x, grid_min_vertex, grid_max_vertex, grid_embedds):
         '''
@@ -205,7 +213,7 @@ class HashEmbedder(nn.Module):
 
         return c
 
-    def forward(self, x):
+    def forward(self, x, interp=True):
         # x is 2D point position: B x 2
         x_embedded_all = []
         for i in range(self.n_levels):
@@ -214,7 +222,10 @@ class HashEmbedder(nn.Module):
             #print(torch.min(hashed_grid_indices), torch.max(hashed_grid_indices))
             grid_embedds = self.embeddings[i](hashed_grid_indices)
 
-            x_embedded = self.bilinear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+            if interp:
+                x_embedded = self.bilinear_interp(x, grid_min_vertex, grid_max_vertex, grid_embedds)
+            else: 
+                x_embedded = hashed_grid_indices
             x_embedded_all.append(x_embedded)
 
         return torch.cat(x_embedded_all, dim=-1)
@@ -257,7 +268,6 @@ class HashEmbedder(nn.Module):
         new_coords = coords[..., 0]*resolution + coords[..., 1]
         return new_coords.type(torch.int)
 
-
 class NGP(nn.Module):
     def __init__(
         self,
@@ -298,8 +308,8 @@ class NGP(nn.Module):
         self.net.append(nn.Linear(dim_hidden, dim_out))
         self.net = nn.Sequential(*self.net)
 
-    def forward(self, x, hash=True):
-        x = self.hash_table(x)
+    def forward(self, x, hash=True, interp=True):
+        x = self.hash_table(x, interp=interp) if hash else x
         output = self.net(x)
 
         return output
