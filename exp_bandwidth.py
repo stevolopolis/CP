@@ -23,7 +23,7 @@ MODEL = 'ngp'
 MODEL_NAME = f"{MODEL}_refactor"
 
 # Training parameters
-n_trials = 1
+n_trials = 10
 n_seeds = 3
 n_samples = 50000
 n = 1000

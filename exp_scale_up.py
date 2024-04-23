@@ -21,8 +21,8 @@ experiment_name = "scaling"
 MODEL = 'ngp'
 
 # Training parameters
-n_trials = 1
-n_seeds = 1
+n_trials = 10
+n_seeds = 3
 n_samples = 50000
 n = 1000
 epoch = 25000
