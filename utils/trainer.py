@@ -1,12 +1,16 @@
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from tqdm import tqdm
+import wandb
+
+from skimage.metrics import peak_signal_noise_ratio as psnr_func
+from skimage.metrics import structural_similarity as ssim_func
 
 from models import *
 from utils import *
 
 
-def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=None, device="cuda"):    
+def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=None, wandb=False):    
     # Load model
     print("Number of parameters:")
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
@@ -20,13 +24,14 @@ def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=N
 
     print("training model...")
     # Train model
-    for i in tqdm(range(epoch)):
+    for i in range(epoch):
         # If hash_vals is provided, use it as input and skip the hash table
         if hash_vals is not None:
             model_prediction = model.net(hash_vals)
         else:
             model_prediction = model(sample)
         loss = ((model_prediction - signal)**2).mean()
+        psnr = psnr_func(model_prediction.clamp(0, 1).cpu().detach().numpy(), signal.cpu().detach().numpy())
 
         optim.zero_grad()
         loss.backward()
@@ -36,6 +41,11 @@ def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=N
         if i % int(epoch / nframes) == 0:
             model_pred_history.append(model_prediction.detach().cpu().numpy())
 
+        if wandb:
+            wandb.log({"loss": loss.item(), "psnr": psnr, "lr": scheduler.get_last_lr()[0]}, step=i)
+
+    if wandb:
+        wandb.finish()
     print("Training completed.")
     print("Model loss: %s" % loss.item())
 
