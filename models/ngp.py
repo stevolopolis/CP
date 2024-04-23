@@ -28,7 +28,7 @@ class HashEmbedder1D(nn.Module):
     def __init__(self, img_size, n_levels=16, n_features_per_level=2,\
                 log2_hashmap_size=19, base_resolution=16, finest_resolution=512):
         super(HashEmbedder1D, self).__init__()
-        self.img_size = img_size
+        self.img_size = img_size[0]
         self.n_levels = n_levels
         self.n_features_per_level = n_features_per_level
         self.log2_hashmap_size = log2_hashmap_size

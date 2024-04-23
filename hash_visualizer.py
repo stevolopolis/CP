@@ -132,7 +132,7 @@ def visualize_isolated_ngp_hashing(trainer, x, y, data_shape, log):
         log["recon_w/o_L%s+" % level] = wandb.Image(alt_im)
 
 
-def load_model_and_configs(data_path, config_path, model_path, model_type, data_size=1, device="cuda"):
+def load_model_and_configs(data_path, config_path, model_path, model_type, dim_in=1, dim_out=1, data_dim=[1], device="cuda"):
     x = None
     y = None
     configs = None
@@ -149,7 +149,8 @@ def load_model_and_configs(data_path, config_path, model_path, model_type, data_
         configs = get_default_model_configs(model_type)
 
     # Get model
-    model = get_model(model_type, 2, 3, data_size, configs, device=device)
+    assert dim_in == len(data_dim), "Input dimension does not match the data dimension."
+    model = get_model(model_type, dim_in, dim_out, data_dim, configs, device=device)
     # load model
     model.load_state_dict(torch.load(model_path, map_location=device))  
     # load model
@@ -163,28 +164,21 @@ MEGAPIXELS = ["pluto", "tokyo", "mars"]
 DATA_ID = 0
 MODEL = "ngp"
 
-MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
-MODEL_WEIGHTS_PATH = "%s/%s_%s.pth" % (MODEL_PATH, MODEL, DATA_ID)
-MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
-MODEL_HASH_PATH = "%s/visualization.png" % MODEL_PATH
+MODEL_PATH = f'results/{MODEL}/{MODEL}_{DATA_ID}'
+VIS_PATH = "vis/experiments"
+MODEL_WEIGHTS_PATH = f"{MODEL_PATH}/{MODEL}_{DATA_ID}.pth"
+HASH_VIS_PATH = f"{MODEL_PATH}/visualization.png"
 
 random.seed(1001)
 
 
 if __name__ == "__main__":
-    for DATA_ID in tqdm(range(0, 14)):
-        MODEL_PATH = 'results/%s/%s_%s' % (MODEL, MODEL, DATA_ID)
-        MODEL_WEIGHTS_PATH = "%s/weights.pth" % (MODEL_PATH)
-        MODEL_PRED_PATH = "%s/ngp_pred.png" % MODEL_PATH
-        MODEL_HASH_PATH = "%s/visualization.png" % MODEL_PATH
-        EXP_VIS_PATH = "vis/experiments"
+    # Load model configs
+    model, x, y, configs = load_model_and_configs(f"{MODEL_PATH}/data.npy", f"{MODEL_PATH}/configs.json", MODEL_WEIGHTS_PATH, MODEL)
 
-        # Load model configs
-        model, x, y, configs = load_model_and_configs(f"{MODEL_PATH}/data.npy", f"{MODEL_PATH}/configs.json", MODEL_WEIGHTS_PATH, MODEL)
+    # visualize model prediction
+    visualization_1d(model, x, y, one_to_one=True, save_path=HASH_VIS_PATH)
 
-        # visualize model prediction
-        visualization_1d(model, x, y, one_to_one=True, save_path=MODEL_HASH_PATH)
-
-        for turning in ["noturning", "scale", "flip"]:  
-            visualization_hash_and_turning(model, x, turning=turning, save_path=f"{EXP_VIS_PATH}/hash_turning_{DATA_ID}_{turning}.png")
+    for turning in ["noturning", "scale", "flip"]:  
+        visualization_hash_and_turning(model, x, turning=turning, save_path=f"{VIS_PATH}/hash_turning_{DATA_ID}_{turning}.png")
     

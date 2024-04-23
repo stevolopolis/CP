@@ -34,7 +34,6 @@ n_samples = 50000
 n = 1000
 epoch = 3000
 max_bandwidth = 500
-device = "cuda:0"
 
 # Animation parameters
 nframes = 30
@@ -43,9 +42,6 @@ nframes = 30
 def train(base_path, data_path, img_idx, n_seeds, device="cuda"):
     print("generating samples...")
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
-
-    empirical_save_path = f"{base_path}/{img_idx}"
-    create_subdirectories(empirical_save_path)
 
     dataLoader = ImageFile(data_path, coord_mode=0)
     H, W, C = dataLoader.get_data_shape()
@@ -90,17 +86,18 @@ def train(base_path, data_path, img_idx, n_seeds, device="cuda"):
             model_loss, model_preds = trainer(sample, signal, model, optim, scheduler, epoch, nframes)
             
             # Animate model predictions
-            animate_model_preds_2d([signal.cpu().numpy()]+model_preds, (H, W, C), nframes, f"{empirical_save_path}/preds_{img_idx}_{resolution}_{seed}.mp4")
+            animate_model_preds_2d([signal.cpu().numpy()]+model_preds, (H, W, C), nframes, f"{base_path}/preds_{img_idx}_{resolution}_{seed}.mp4")
             # Save model configs
-            save_configs(configs, f"{empirical_save_path}/configs_{resolution}.json")
+            save_configs(configs, f"{base_path}/configs_{resolution}.json")
             # Save model loss
-            save_vals([model_loss], f"{empirical_save_path}/loss_{img_idx}_{resolution}_{seed}.txt")
+            save_vals([model_loss], f"{base_path}/loss_{img_idx}_{resolution}_{seed}.txt")
             # Save model weights
-            torch.save(model.state_dict(), f"{empirical_save_path}/weights_{img_idx}_{resolution}_{seed}.pth")
-            print(f"model weights saved at {empirical_save_path}/weights_{img_idx}_{resolution}_{seed}.pth")
+            torch.save(model.state_dict(), f"{base_path}/weights_{img_idx}_{resolution}_{seed}.pth")
+            print(f"model weights saved at {base_path}/weights_{img_idx}_{resolution}_{seed}.pth")
 
 
 if __name__ == "__main__":
+    DEVICE = "cuda:0"
     DATA_PATH = f"../data/kodak"
     BASE_PATH = f"vis/{experiment_name}/{MODEL_NAME}"
     EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
@@ -109,4 +106,7 @@ if __name__ == "__main__":
     create_subdirectories(FIGURE_PATH)
 
     for img_idx in range(1, 4):
-        train(EMPIRICAL_PATH, f"{DATA_PATH}/kodim{str(img_idx).zfill(2)}.png", img_idx, n_seeds, device=device)
+        empirical_save_path = f"{BASE_PATH}/{img_idx}"
+        create_subdirectories(empirical_save_path)
+        
+        train(empirical_save_path, f"{DATA_PATH}/kodim{str(img_idx).zfill(2)}.png", img_idx, n_seeds, device=DEVICE)

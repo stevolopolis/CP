@@ -19,12 +19,11 @@ experiment_name = "bandwidth"
 
 # Model parameters
 signal_type = "fourier"
-MODEL = 'relu'
-MODEL_NAME = f"{MODEL}"
-# MODEL_NAME = f"{MODEL}_{signal_type}"
+MODEL = 'ngp'
+MODEL_NAME = f"{MODEL}_refactor"
 
 # Training parameters
-n_trials = 10
+n_trials = 1
 n_seeds = 3
 n_samples = 50000
 n = 1000
@@ -40,9 +39,6 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
     torch.manual_seed(trial)
     print("generating samples...")
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
-
-    empirical_save_path = f"{base_path}/{trial}"
-    create_subdirectories(empirical_save_path)
 
     # Generate full bandwidth signal
     if signal_type == "fourier":
@@ -60,7 +56,7 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
             # signal, _, _, _ = generate_piecewise_signal(sample, bandwidth, seed=trial)
 
         # Save data & configs
-        save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{empirical_save_path}/data_{bandwidth}.npy")
+        save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{base_path}/data_{bandwidth}.npy")
 
         # Generate specific hash vals
         for seed in range(n_seeds):
@@ -77,17 +73,17 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
             # Load default model optimizers and schedulers
             optim, scheduler = get_default_model_opts(MODEL, model, epoch)
             # Model training
-            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes, device=device)
+            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes)
             
             # Animate model predictions
-            animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/preds_{bandwidth}_{seed}.mp4")
+            animate_model_preds(sample, signal, model_preds, nframes, f"{base_path}/preds_{bandwidth}_{seed}.mp4")
             # Save model configs
-            save_configs(configs, f"{empirical_save_path}/configs.json")
+            save_configs(configs, f"{base_path}/configs.json")
             # Save model loss
-            save_vals([model_loss], f"{empirical_save_path}/loss_{bandwidth}_{seed}.txt")
+            save_vals([model_loss], f"{base_path}/loss_{bandwidth}_{seed}.txt")
             # Save model weights
-            torch.save(model.state_dict(), f"{empirical_save_path}/weights_{bandwidth}_{seed}.pth")
-            print(f"model weights saved at {empirical_save_path}/weights_{bandwidth}_{seed}.pth")
+            torch.save(model.state_dict(), f"{base_path}/weights_{bandwidth}_{seed}.pth")
+            print(f"model weights saved at {base_path}/weights_{bandwidth}_{seed}.pth")
 
 
 def plot(empirical_path, figure_path, hashing=True, device="cuda"):
@@ -113,7 +109,7 @@ def plot(empirical_path, figure_path, hashing=True, device="cuda"):
                 create_subdirectories(hash_val_save_path, is_file=True)
 
                 # load trained_model
-                model, x, y, configs = load_model_and_configs(data_path, config_path, model_path, MODEL, device=device)
+                model, x, y, configs = load_model_and_configs(data_path, config_path, model_path, MODEL, dim_in=1, dim_out=1, data_dim=[1], device=device)
                 # load loss
                 model_loss = load_vals(loss_path)[0]
                 if hashing:
@@ -166,12 +162,6 @@ def plot(empirical_path, figure_path, hashing=True, device="cuda"):
             continue
         x, y, yerr = scatter_to_errbar(total["bandwidths"], total[key])
         plot_errbar(x, y, yerr, "bandwidths", key, f"{key} vs bandwidths", f"{figure_path}/{key}_vs_bandwidths.png")
-        # plot_scatter(total["bandwidths"],
-        #             total[key],
-        #             "bandwidths",
-        #             key,
-        #             f"{key} vs bandwidths",
-        #             f"{figure_path}/{key}_vs_bandwidths.png")
 
 
 def scatter_to_errbar(x, y):
@@ -231,7 +221,8 @@ def plot_errbar(x, y, yerr, xlabel, ylabel, title, save_path):
 
 
 if __name__ == "__main__":
-    BASE_PATH = f"vis/bandwidth/{MODEL_NAME}"
+    DEVICE = "cuda:0"
+    BASE_PATH = f"vis/{experiment_name}/{MODEL_NAME}"
     EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
     FIGURE_PATH = f"{BASE_PATH}/figures"
     create_subdirectories(EMPIRICAL_PATH)
@@ -239,9 +230,11 @@ if __name__ == "__main__":
 
     # train
     for trial in range(n_trials):
-       train(EMPIRICAL_PATH, trial, n_seeds=n_seeds, signal_type=signal_type, device="cuda:0")
+        empirical_save_path = f"{BASE_PATH}/{trial}"
+        create_subdirectories(empirical_save_path)
+        train(empirical_save_path, trial, n_seeds=n_seeds, signal_type=signal_type, device=DEVICE)
 
     # Plot
-    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device="cuda:1")
+    plot(EMPIRICAL_PATH, FIGURE_PATH, hashing=MODEL=="ngp", device=DEVICE)
 
     

@@ -21,34 +21,29 @@ experiment_name = "scaling"
 MODEL = 'ngp'
 
 # Training parameters
-n_trials = 5
+n_trials = 1
+n_seeds = 1
 n_samples = 50000
 n = 1000
 epoch = 25000
-device = "cuda:2"
 
 # Animation parameters
 nframes = 30
 
-def train(trial, n_seeds):
+def train(base_path, trial, n_seeds, device="cuda"):
     # Data setup
     sample = torch.tensor(np.linspace(0, 1, n_samples)).to(torch.float32).to(device)
 
     n_max_pieces = 1000
     n_segs = 2
 
-    analytical_save_path = f"vis/{experiment_name}/analytical/{trial}"
-    empirical_save_path = f"vis/{experiment_name}/empirical/{trial}"
-    create_subdirectories(analytical_save_path)
-    create_subdirectories(empirical_save_path)
-
     # Generate signal
     segmented_n_pieces = [random.randint(1, n_max_pieces) for _ in range(n_segs)]
     signal, _, _, _ = generate_piecewise_signal(sample, segmented_n_pieces, seed=trial, device=device)
 
     # Save data & configs
-    save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{empirical_save_path}/data.npy")
-    save_vals(segmented_n_pieces, f"{empirical_save_path}/n_pieces.txt")
+    save_data(sample.cpu().numpy(), signal.cpu().numpy(), f"{base_path}/data.npy")
+    save_vals(segmented_n_pieces, f"{base_path}/n_pieces.txt")
     
     for seed in range(n_seeds):
         # Generate specific hash vals
@@ -68,17 +63,17 @@ def train(trial, n_seeds):
             # Load default model optimizers and schedulers
             optim, scheduler = get_default_model_opts(MODEL, model, epoch)
             # Train model
-            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes, hash_vals=new_hash_vals, device=device)
+            model_loss, model_preds = trainer(sample.unsqueeze(1), signal.unsqueeze(1), model, optim, scheduler, epoch, nframes, hash_vals=new_hash_vals)
             # Save model loss
-            save_vals([model_loss], f"{empirical_save_path}/loss_{mid_hash}_{seed}.txt")
+            save_vals([model_loss], f"{base_path}/loss_{mid_hash}_{seed}.txt")
             # Animate model predictions
-            animate_model_preds(sample, signal, model_preds, nframes, f"{empirical_save_path}/preds_{mid_hash}_{seed}.mp4")
+            animate_model_preds(sample, signal, model_preds, nframes, f"{base_path}/preds_{mid_hash}_{seed}.mp4")
             # Save model weights
-            torch.save(model.state_dict(), f"{empirical_save_path}/weights_{mid_hash}_{seed}.pth")
-            print(f"model weights saved at {empirical_save_path}/weights_{mid_hash}_{seed}.pth")
+            torch.save(model.state_dict(), f"{base_path}/weights_{mid_hash}_{seed}.pth")
+            print(f"model weights saved at {base_path}/weights_{mid_hash}_{seed}.pth")
 
     # Save model configs
-    save_configs(configs, f"{empirical_save_path}/configs.json")
+    save_configs(configs, f"{base_path}/configs.json")
 
 
 def plot(trial, n_seeds):
@@ -115,6 +110,16 @@ def plot(trial, n_seeds):
     plt.close()
 
 if __name__ == "__main__":
-    for trial in range(1, 10):
-        train(trial, 3)
-        plot(trial, 3)
+    DEVICE = "cuda:0"
+    BASE_PATH = f"vis/{experiment_name}"
+    EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
+    FIGURE_PATH = f"{BASE_PATH}/figures"
+    create_subdirectories(EMPIRICAL_PATH)
+    create_subdirectories(FIGURE_PATH)
+
+    for trial in range(n_trials):
+        empirical_save_path = f"{EMPIRICAL_PATH}/{trial}"
+        create_subdirectories(empirical_save_path)
+
+        train(empirical_save_path, trial, n_seeds, device=DEVICE)
+        plot(trial, n_seeds)
