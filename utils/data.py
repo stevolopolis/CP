@@ -2,20 +2,21 @@ import errno
 import random
 import torch
 import sys
-from torch import nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset
-
-import torchvision
-from torchvision.transforms import Compose, Resize, ToTensor, Normalize
-
-import numpy as np
-from PIL import Image
 import skimage
 import os
 import math
-
 import urllib3
+import torchvision
+
+from torch import nn
+import torch.nn.functional as F
+import numpy as np
+
+from torch.utils.data import Dataset
+from PIL import Image
+from torchvision.transforms import Compose, Resize, ToTensor, Normalize
+
+from scorers import *
 
 ###########################
 # Toy signal generators
@@ -43,34 +44,67 @@ def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
     if isinstance(n, list):
         n_segs = len(n)
         samples_per_seg = len(sample) // n_segs
-        knots = (torch.rand(n[0]+1) * len(sample) // n_segs).int()
+        knot_idx = (torch.rand(n[0]+1) * len(sample) // n_segs).int()
         for i, sub_n in enumerate(n[1:], 1):
-            knots = torch.cat((knots, (torch.rand(sub_n+1) * samples_per_seg + (samples_per_seg * i)).int()), dim=0)
+            knot_idx = torch.cat((knot_idx, (torch.rand(sub_n+1) * samples_per_seg + (samples_per_seg * i)).int()), dim=0)
         n_pieces = sum(n)
     else:
-        knots = (torch.rand(n+1) * len(sample)).int()
+        knot_idx = (torch.rand(n+1) * len(sample)).int()
         n_pieces = n
-    knots[0] = 0
-    knots[-1] = len(sample)-1
-    knots = torch.sort(knots)[0].to(device)
+    knot_idx[0] = 0
+    knot_idx[-1] = len(sample)-1
+    knot_idx = torch.sort(knot_idx)[0].to(device)
     #slopes = torch.randn(n_pieces).to(device)
     slopes = (torch.rand(n_pieces).to(device) - 0.5) * 4
     init_y = torch.randn(1).to(device)
     b = []
     for i in range(n_pieces+1):
         if i == 0:
-            signal[:knots[i]] = init_y
-        elif i == n_pieces-1:
-            signal[knots[i-1]:] = slopes[i-1] * (sample[knots[i-1]:] - sample[knots[i-1]]) + signal[knots[i-1]-1]
-            b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
+            signal[0] = init_y
+        elif i == n_pieces:
+            signal[knot_idx[i-1]:] = slopes[i-1] * (sample[knot_idx[i-1]:] - sample[knot_idx[i-1]-1]) + signal[knot_idx[i-1]-1]
+            b.append(signal[knot_idx[i-1]-1] - slopes[i-1] * sample[knot_idx[i-1]-1])
         elif i == 1:
-            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + init_y.to(device)
+            signal[knot_idx[i-1]:knot_idx[i]] = slopes[i-1] * (sample[:knot_idx[i]] - sample[0]) + init_y.to(device)
             b.append(init_y)
         else:
-            signal[knots[i-1]:knots[i]] = slopes[i-1] * (sample[knots[i-1]:knots[i]] - sample[knots[i-1]]) + signal[knots[i-1]-1]
-            b.append(signal[knots[i-1]-1] - slopes[i-1] * sample[knots[i-1]-1])
+            signal[knot_idx[i-1]:knot_idx[i]] = slopes[i-1] * (sample[knot_idx[i-1]:knot_idx[i]] - sample[knot_idx[i-1]-1]) + signal[knot_idx[i-1]-1]
+            b.append(signal[knot_idx[i-1]-1] - slopes[i-1] * sample[knot_idx[i-1]-1])
 
-    return signal, knots, slopes, torch.tensor(b)
+    return signal, knot_idx, slopes, torch.tensor(b)
+
+
+def decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth):
+    coeffs[bandwidth:] = 0
+    simplified_signal, _, _, _ = generate_fourier_signal(sample, bandwidth, coeffs=coeffs, freqs=freqs, phases=phases)
+
+    return simplified_signal
+
+
+def decrement_piecewise_signal(sample, signal, knot_idx, bandwidth):
+    n_samples = len(sample)
+    sample_int = torch.arange(n_samples)
+    points = [(sample_int[knot_idx[i]].item(), signal[knot_idx[i]].item()) for i in range(len(knot_idx))]
+    simplified_points = ramer_douglas_peucker(points, bandwidth)
+    simplified_signal = points_to_signal(sample, simplified_points)
+
+    return simplified_signal
+
+
+def points_to_signal(sample, points):
+    signal = torch.zeros_like(sample)
+    for i in range(len(points)-1):
+        start_x, start_y = points[i]
+        end_x, end_y = points[i+1]
+        if start_x == end_x:
+            continue
+        slope = (end_y - start_y) / (sample[end_x] - sample[start_x])
+        signal[start_x : end_x] = slope * (sample[start_x : end_x] - sample[start_x]) + start_y
+    
+    if end_x < len(sample):
+        signal[end_x:] = end_y
+
+    return signal
 
 
 def generate_piecewise_segmented_signal(samples, ns, seed=42):

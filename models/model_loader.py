@@ -73,7 +73,7 @@ def get_default_model_opts(model_type, model, epoch=5000):
 
 def get_model(model_type, dim_in, dim_out, data_size, configs, device="cuda"):
     if model_type == 'relu':
-        model = MLP(dim_in, dim_out, hidden_dim, configs).to(device)
+        model = MLP(dim_in, dim_out, configs).to(device)
     elif model_type == 'linear':
         model = LinearModel().to(device)
     elif model_type in ["ngp", "ngp_2d", "ngp_multilevel_2d", "ngp_2d_one2one"]:
