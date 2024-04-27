@@ -74,9 +74,9 @@ def generate_piecewise_signal(sample, n, seed=42, device="cuda"):
     return signal, knot_idx, slopes, torch.tensor(b)
 
 
-def decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth):
+def decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth, device="cuda"):
     coeffs[bandwidth:] = 0
-    simplified_signal, _, _, _ = generate_fourier_signal(sample, bandwidth, coeffs=coeffs, freqs=freqs, phases=phases)
+    simplified_signal, _, _, _ = generate_fourier_signal(sample, bandwidth, coeffs=coeffs, freqs=freqs, phases=phases, device=device)
 
     return simplified_signal
 

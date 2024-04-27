@@ -20,7 +20,7 @@ experiment_name = "bandwidth"
 # Model parameters
 signal_type = "fourier"
 MODEL = 'ngp'
-MODEL_NAME = f"{MODEL}_refactor"
+MODEL_NAME = f"{MODEL}"
 
 # Training parameters
 n_trials = 10
@@ -42,15 +42,15 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
 
     # Generate full bandwidth signal
     if signal_type == "fourier":
-        full_band_signal, coeffs, freqs, phases = generate_fourier_signal(sample, max_bandwidth)
+        full_band_signal, coeffs, freqs, phases = generate_fourier_signal(sample, max_bandwidth, device=device)
     elif signal_type == "piecewise":
-        full_band_signal, knot_idx, _, _ = generate_piecewise_signal(sample, max_bandwidth, seed=trial)
+        full_band_signal, knot_idx, _, _ = generate_piecewise_signal(sample, max_bandwidth, seed=trial, device=device)
     else:
         raise ValueError("Signal type not recognized")
     
     for bandwidth in range(max_bandwidth, 1, -bandwidth_decrement):
         if signal_type == "fourier":
-            signal = decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth)
+            signal = decrement_fourier_signal(sample, coeffs, freqs, phases, bandwidth, device=device)
         elif signal_type == "piecewise":
             signal = decrement_piecewise_signal(sample, full_band_signal, knot_idx, bandwidth)
             # signal, _, _, _ = generate_piecewise_signal(sample, bandwidth, seed=trial)
@@ -64,7 +64,7 @@ def train(base_path, trial, n_seeds, signal_type="fourier", device="cuda"):
             # Load default model configs
             configs = get_default_model_configs(MODEL)
             # Get model
-            model = get_model(MODEL, 1, 1, 1, configs, device=device)
+            model = get_model(MODEL, 1, 1, [1], configs, device=device)
             # Initialize model weights
             if MODEL == "ngp":
                 model.init_weights(ordered=True)
@@ -221,7 +221,7 @@ def plot_errbar(x, y, yerr, xlabel, ylabel, title, save_path):
 
 
 if __name__ == "__main__":
-    DEVICE = "cuda:0"
+    DEVICE = "cuda:2"
     BASE_PATH = f"vis/{experiment_name}/{MODEL_NAME}"
     EMPIRICAL_PATH = f"{BASE_PATH}/empirical"
     FIGURE_PATH = f"{BASE_PATH}/figures"
@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
     # train
     for trial in range(n_trials):
-        empirical_save_path = f"{BASE_PATH}/{trial}"
+        empirical_save_path = f"{EMPIRICAL_PATH}/{trial}"
         create_subdirectories(empirical_save_path)
         train(empirical_save_path, trial, n_seeds=n_seeds, signal_type=signal_type, device=DEVICE)
 
