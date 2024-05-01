@@ -59,11 +59,19 @@ class HashEmbedder1D(nn.Module):
         # custom uniform initialization
         self.reset_parameters()
 
-    def reset_parameters(self, ordered=False):
+    def reset_parameters(self, ordered=False, flipped=False):
         if ordered:
             for i in range(self.n_levels):
                 n_weights = self.embeddings[i].weight.shape[0]
                 self.embeddings[i].weight.data = torch.linspace(-0.0001, 0.0001, n_weights).unsqueeze(1).float().to(self.embeddings[i].weight.device)
+        else:
+            for i in range(self.n_levels):
+                nn.init.uniform_(self.embeddings[i].weight, a=-1, b=1)
+
+        if flipped:
+            for i in range(self.n_levels):
+                nn.init.uniform_(self.embeddings[i].weight[::2], a=-0.0001, b=0.0)
+                nn.init.uniform_(self.embeddings[i].weight[1::2], a=0.0, b=0.0001)
         else:
             for i in range(self.n_levels):
                 nn.init.uniform_(self.embeddings[i].weight, a=-0.0001, b=0.0001)
@@ -320,3 +328,7 @@ class NGP(nn.Module):
                 layer.reset_parameters()
             
         self.hash_table.reset_parameters(ordered=ordered)
+
+    def freeze_hash_table(self):
+        for param in self.hash_table.parameters():
+            param.requires_grad = False
