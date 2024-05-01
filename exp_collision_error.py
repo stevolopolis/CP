@@ -83,7 +83,7 @@ def train(base_path, data_path, img_idx, n_seeds, device="cuda"):
             )
             wandb.run.summary['n_params'] = n_params
 
-            model_loss, model_preds = trainer(sample, signal, model, optim, scheduler, epoch, nframes, wandb=True)
+            model_loss, model_preds = trainer(sample, signal, model, optim, scheduler, epoch, nframes, use_wandb=True)
             
             # Animate model predictions
             animate_model_preds_2d([signal.cpu().numpy()]+model_preds, (H, W, C), nframes, f"{base_path}/preds_{img_idx}_{resolution}_{seed}.mp4")

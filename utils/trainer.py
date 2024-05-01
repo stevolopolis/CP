@@ -10,7 +10,7 @@ from models import *
 from utils import *
 
 
-def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=None, wandb=False):    
+def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=None, use_wandb=False):    
     # Load model
     print("Number of parameters:")
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
@@ -41,10 +41,10 @@ def trainer(sample, signal, model, optim, scheduler, epoch, nframes, hash_vals=N
         if i % int(epoch / nframes) == 0:
             model_pred_history.append(model_prediction.detach().cpu().numpy())
 
-        if wandb:
+        if use_wandb:
             wandb.log({"loss": loss.item(), "psnr": psnr, "lr": scheduler.get_last_lr()[0]}, step=i)
 
-    if wandb:
+    if use_wandb:
         wandb.finish()
     print("Training completed.")
     print("Model loss: %s" % loss.item())

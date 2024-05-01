@@ -27,6 +27,11 @@ def get_default_model_configs(model_type):
         NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
         c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=1, log2_n_features=5, base_resolution=25, finest_resolution=25, num_layers=n_layers)
         c = Config(NET=c_net)
+    elif model_type == "ngp_feature2d":
+        Config = namedtuple("config", ["NET"])
+        NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
+        c_net = NetworkConfig(dim_hidden=hidden_dim, n_levels=1, feature_dim=2, log2_n_features=5, base_resolution=25, finest_resolution=25, num_layers=n_layers)
+        c = Config(NET=c_net)
     elif model_type == "ngp_2d":
         Config = namedtuple("config", ["NET"])
         NetworkConfig = namedtuple("NET", ["dim_hidden", "n_levels", "feature_dim", "log2_n_features", "base_resolution", "finest_resolution", "num_layers"])
@@ -56,7 +61,7 @@ def get_default_model_opts(model_type, model, epoch=5000):
     elif model_type == 'linear':
         optim = torch.optim.Adam(model.parameters(), lr=0.05)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-2)
-    elif model_type == "ngp":
+    elif model_type == "ngp" or model_type == "ngp_feature2d":
         optim = torch.optim.Adam(model.parameters(), lr=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, epoch, eta_min=1e-4)
     elif model_type == "ngp_2d" or model_type == "ngp_2d_one2one":
@@ -76,7 +81,7 @@ def get_model(model_type, dim_in, dim_out, data_size, configs, device="cuda"):
         model = MLP(dim_in, dim_out, configs).to(device)
     elif model_type == 'linear':
         model = LinearModel().to(device)
-    elif model_type in ["ngp", "ngp_2d", "ngp_multilevel_2d", "ngp_2d_one2one"]:
+    elif model_type in ["ngp", "ngp_feature2d", "ngp_2d", "ngp_multilevel_2d", "ngp_2d_one2one"]:
         model = NGP(dim_in, dim_out, data_size, configs).to(device)
     else:
         raise ValueError("Model type not recognized")
